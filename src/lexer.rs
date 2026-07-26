@@ -3,10 +3,17 @@ pub enum Token {
     Identifier(String),
     Number(i32),
 
-    Plus,
-    Minus,
     Asterisk,
     Slash,
+    Percent,
+    Plus,
+    Minus,
+    Ampersand,
+    VerticalBar,
+    Caret,
+    Tilde,
+    LeftAngle,
+    RightAngle,
 
     Equals,
     Semicolon,
@@ -44,14 +51,6 @@ impl Lexer {
         let c = self.input[self.position];
 
         match c {
-            '+' => {
-                self.position += 1;
-                Token::Plus
-            }
-            '-' => {
-                self.position += 1;
-                Token::Minus
-            }
             '*' => {
                 self.position += 1;
                 Token::Asterisk
@@ -60,7 +59,42 @@ impl Lexer {
                 self.position += 1;
                 Token::Slash
             }
-
+            '%' => {
+                self.position += 1;
+                Token::Percent
+            }
+            '+' => {
+                self.position += 1;
+                Token::Plus
+            }
+            '-' => {
+                self.position += 1;
+                Token::Minus
+            }
+            '&' => {
+                self.position += 1;
+                Token::Ampersand
+            }
+            '|' => {
+                self.position += 1;
+                Token::VerticalBar
+            }
+            '^' => {
+                self.position += 1;
+                Token::Caret
+            }
+            '~' => {
+                self.position += 1;
+                Token::Tilde
+            }
+            '<' => {
+                self.position += 1;
+                Token::LeftAngle
+            }
+            '>' => {
+                self.position += 1;
+                Token::RightAngle
+            }
             '=' => {
                 self.position += 1;
                 Token::Equals

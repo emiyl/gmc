@@ -84,8 +84,17 @@ impl Compiler {
                     opcode: match operator {
                         BinaryOp::Mul => Opcode::Mul,
                         BinaryOp::Div => Opcode::Div,
+                        BinaryOp::Rem => Opcode::Rem,
+                        BinaryOp::Mod => Opcode::Mod,
                         BinaryOp::Add => Opcode::Add,
                         BinaryOp::Sub => Opcode::Sub,
+                        BinaryOp::And => Opcode::And,
+                        BinaryOp::Or => Opcode::Or,
+                        BinaryOp::Xor => Opcode::Xor,
+                        BinaryOp::Neg => Opcode::Neg,
+                        BinaryOp::Not => Opcode::Not,
+                        BinaryOp::Shl => Opcode::Shl,
+                        BinaryOp::Shr => Opcode::Shr,
                     },
                     rhs_type,
                 });

@@ -1,6 +1,8 @@
 use crate::ast::*;
+use crate::lexer::Token::Identifier;
 use crate::lexer::{Lexer, Token};
 
+#[derive(Debug)]
 pub struct Parser {
     lexer: Lexer,
     current: Token,
@@ -71,29 +73,7 @@ impl Parser {
         let mut left = self.parse_primary();
 
         loop {
-            match self.current {
-                Token::Plus => {
-                    self.advance();
-
-                    let right = self.parse_primary();
-
-                    left = Expr::Binary {
-                        left: Box::new(left),
-                        operator: BinaryOp::Add,
-                        right: Box::new(right),
-                    };
-                }
-                Token::Minus => {
-                    self.advance();
-
-                    let right = self.parse_primary();
-
-                    left = Expr::Binary {
-                        left: Box::new(left),
-                        operator: BinaryOp::Sub,
-                        right: Box::new(right),
-                    };
-                }
+            match &self.current {
                 Token::Asterisk => {
                     self.advance();
 
@@ -116,6 +96,127 @@ impl Parser {
                         right: Box::new(right),
                     };
                 }
+                Token::Percent => {
+                    self.advance();
+
+                    let right = self.parse_primary();
+
+                    left = Expr::Binary {
+                        left: Box::new(left),
+                        operator: BinaryOp::Rem,
+                        right: Box::new(right),
+                    };
+                }
+                Token::Plus => {
+                    self.advance();
+
+                    let right = self.parse_primary();
+
+                    left = Expr::Binary {
+                        left: Box::new(left),
+                        operator: BinaryOp::Add,
+                        right: Box::new(right),
+                    };
+                }
+                Token::Minus => {
+                    self.advance();
+
+                    let right = self.parse_primary();
+
+                    left = Expr::Binary {
+                        left: Box::new(left),
+                        operator: BinaryOp::Sub,
+                        right: Box::new(right),
+                    };
+                }
+                Token::Ampersand => {
+                    self.advance();
+
+                    let right = self.parse_primary();
+
+                    left = Expr::Binary {
+                        left: Box::new(left),
+                        operator: BinaryOp::And,
+                        right: Box::new(right),
+                    };
+                }
+                Token::VerticalBar => {
+                    self.advance();
+
+                    let right = self.parse_primary();
+
+                    left = Expr::Binary {
+                        left: Box::new(left),
+                        operator: BinaryOp::Or,
+                        right: Box::new(right),
+                    };
+                }
+                Token::Caret => {
+                    self.advance();
+
+                    let right = self.parse_primary();
+
+                    left = Expr::Binary {
+                        left: Box::new(left),
+                        operator: BinaryOp::Xor,
+                        right: Box::new(right),
+                    };
+                }
+                Token::Tilde => {
+                    self.advance();
+
+                    let right = self.parse_primary();
+
+                    left = Expr::Binary {
+                        left: Box::new(left),
+                        operator: BinaryOp::Not,
+                        right: Box::new(right),
+                    };
+                }
+                Token::LeftAngle => {
+                    self.advance();
+
+                    if self.current == Token::LeftAngle {
+                        self.advance();
+
+                        let right = self.parse_primary();
+
+                        left = Expr::Binary {
+                            left: Box::new(left),
+                            operator: BinaryOp::Shl,
+                            right: Box::new(right),
+                        };
+                    }
+                }
+                Token::RightAngle => {
+                    self.advance();
+
+                    if self.current == Token::RightAngle {
+                        self.advance();
+
+                        let right = self.parse_primary();
+
+                        left = Expr::Binary {
+                            left: Box::new(left),
+                            operator: BinaryOp::Shr,
+                            right: Box::new(right),
+                        };
+                    }
+                }
+                Identifier(str) => match str.as_str() {
+                    "mod" => {
+                        self.advance();
+
+                        let right = self.parse_primary();
+
+                        left = Expr::Binary {
+                            left: Box::new(left),
+                            operator: BinaryOp::Mod,
+                            right: Box::new(right),
+                        }
+                    }
+                    _ => break,
+                },
                 _ => break,
             }
         }

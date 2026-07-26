@@ -18,8 +18,17 @@ pub enum Expr {
 pub enum BinaryOp {
     Mul,
     Div,
+    Rem,
+    Mod,
     Add,
     Sub,
+    And,
+    Or,
+    Xor,
+    Neg,
+    Not,
+    Shl,
+    Shr,
 }
 
 #[derive(Debug)]
