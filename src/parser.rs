@@ -162,17 +162,6 @@ impl Parser {
                         right: Box::new(right),
                     };
                 }
-                Token::Tilde => {
-                    self.advance();
-
-                    let right = self.parse_primary();
-
-                    left = Expr::Binary {
-                        left: Box::new(left),
-                        operator: BinaryOp::Not,
-                        right: Box::new(right),
-                    };
-                }
                 Token::LeftAngle => {
                     self.advance();
 

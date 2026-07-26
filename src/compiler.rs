@@ -91,8 +91,6 @@ impl Compiler {
                         BinaryOp::And => Opcode::And,
                         BinaryOp::Or => Opcode::Or,
                         BinaryOp::Xor => Opcode::Xor,
-                        BinaryOp::Neg => Opcode::Neg,
-                        BinaryOp::Not => Opcode::Not,
                         BinaryOp::Shl => Opcode::Shl,
                         BinaryOp::Shr => Opcode::Shr,
                     },

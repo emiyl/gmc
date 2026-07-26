@@ -25,8 +25,6 @@ pub enum BinaryOp {
     And,
     Or,
     Xor,
-    Neg,
-    Not,
     Shl,
     Shr,
 }
