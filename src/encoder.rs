@@ -45,8 +45,12 @@ pub fn encode(instructions: Vec<Instruction>) -> Bytecode {
                 output.write_u32(word);
             }
 
-            Instruction::Add { lhs_type, rhs_type } => {
-                let opcode = Opcode::Add;
+            Instruction::BinaryOp {
+                lhs_type,
+                opcode,
+                rhs_type,
+            } => {
+                let opcode = opcode;
                 let instr_type1 = lhs_type as u8;
                 let instr_type2 = rhs_type as u8;
                 let word = Word::new(opcode as u8, instr_type1, instr_type2, 0).to_u32();

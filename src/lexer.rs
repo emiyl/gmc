@@ -4,6 +4,9 @@ pub enum Token {
     Number(i32),
 
     Plus,
+    Minus,
+    Asterisk,
+    Slash,
 
     Equals,
     Semicolon,
@@ -44,6 +47,18 @@ impl Lexer {
             '+' => {
                 self.position += 1;
                 Token::Plus
+            }
+            '-' => {
+                self.position += 1;
+                Token::Minus
+            }
+            '*' => {
+                self.position += 1;
+                Token::Asterisk
+            }
+            '/' => {
+                self.position += 1;
+                Token::Slash
             }
 
             '=' => {

@@ -1,3 +1,4 @@
+use crate::bytecode::Opcode;
 use crate::resolver::Variable;
 
 #[derive(Debug, Clone, Copy)]
@@ -24,8 +25,9 @@ pub enum Instruction {
         src_type: ValueType,
     },
 
-    Add {
+    BinaryOp {
         lhs_type: ValueType,
+        opcode: Opcode,
         rhs_type: ValueType,
     },
 

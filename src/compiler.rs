@@ -1,4 +1,5 @@
 use crate::ast::*;
+use crate::bytecode::Opcode;
 use crate::instruction::*;
 use crate::resolver::Variable;
 
@@ -78,14 +79,16 @@ impl Compiler {
                 let lhs_type = value_type_from_expr(left);
                 let rhs_type = value_type_from_expr(right);
 
-                match operator {
-                    BinaryOp::Add => {
-                        self.instructions.push(Instruction::Add {
-                            lhs_type: lhs_type,
-                            rhs_type: rhs_type,
-                        });
-                    }
-                }
+                self.instructions.push(Instruction::BinaryOp {
+                    lhs_type,
+                    opcode: match operator {
+                        BinaryOp::Mul => Opcode::Mul,
+                        BinaryOp::Div => Opcode::Div,
+                        BinaryOp::Add => Opcode::Add,
+                        BinaryOp::Sub => Opcode::Sub,
+                    },
+                    rhs_type,
+                });
             }
 
             Expr::Call { name, args } => {

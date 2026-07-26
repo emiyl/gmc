@@ -70,16 +70,54 @@ impl Parser {
     fn parse_expression(&mut self) -> Expr {
         let mut left = self.parse_primary();
 
-        while self.current == Token::Plus {
-            self.advance();
+        loop {
+            match self.current {
+                Token::Plus => {
+                    self.advance();
 
-            let right = self.parse_primary();
+                    let right = self.parse_primary();
 
-            left = Expr::Binary {
-                left: Box::new(left),
-                operator: BinaryOp::Add,
-                right: Box::new(right),
-            };
+                    left = Expr::Binary {
+                        left: Box::new(left),
+                        operator: BinaryOp::Add,
+                        right: Box::new(right),
+                    };
+                }
+                Token::Minus => {
+                    self.advance();
+
+                    let right = self.parse_primary();
+
+                    left = Expr::Binary {
+                        left: Box::new(left),
+                        operator: BinaryOp::Sub,
+                        right: Box::new(right),
+                    };
+                }
+                Token::Asterisk => {
+                    self.advance();
+
+                    let right = self.parse_primary();
+
+                    left = Expr::Binary {
+                        left: Box::new(left),
+                        operator: BinaryOp::Mul,
+                        right: Box::new(right),
+                    };
+                }
+                Token::Slash => {
+                    self.advance();
+
+                    let right = self.parse_primary();
+
+                    left = Expr::Binary {
+                        left: Box::new(left),
+                        operator: BinaryOp::Div,
+                        right: Box::new(right),
+                    };
+                }
+                _ => break,
+            }
         }
 
         left
