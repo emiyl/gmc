@@ -1,7 +1,8 @@
 use crate::bytecode::Opcode;
 use crate::resolver::Variable;
+use num_enum::TryFromPrimitive;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, TryFromPrimitive)]
 #[repr(u8)]
 pub enum ValueType {
     Double = 0x0,
@@ -17,7 +18,7 @@ pub enum ValueType {
 #[derive(Debug)]
 pub enum Instruction {
     PushI(i32),
-    PushVar(Variable),
+    Push(Variable),
 
     Pop {
         variable: Variable,

@@ -71,8 +71,8 @@ pub fn encode(instructions: Vec<Instruction>) -> Bytecode {
                 output.write_u32(variable.var_ref);
             }
 
-            Instruction::PushVar(var) => {
-                let opcode = Opcode::PushVar as u16;
+            Instruction::Push(var) => {
+                let opcode = Opcode::Push as u16;
                 let type1 = ValueType::Var as u8;
                 let type2 = ValueType::Double as u8;
                 let vari = vari::encode_variable(&var);

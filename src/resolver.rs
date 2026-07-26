@@ -42,10 +42,10 @@ impl Resolver {
         instructions
             .into_iter()
             .map(|instruction| match instruction {
-                Instruction::PushVar(var) => {
+                Instruction::Push(var) => {
                     let variable = self.get_variable(&var.name);
 
-                    Instruction::PushVar(variable)
+                    Instruction::Push(variable)
                 }
 
                 Instruction::Pop {

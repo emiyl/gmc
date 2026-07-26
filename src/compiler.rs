@@ -65,7 +65,7 @@ impl Compiler {
                     var_ref: 0,
                 };
 
-                self.instructions.push(Instruction::PushVar(var));
+                self.instructions.push(Instruction::Push(var));
             }
 
             Expr::Binary {

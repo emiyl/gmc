@@ -19,7 +19,7 @@ pub enum Opcode {
     Pop = 0x45,
     PushI = 0x84,
     PopZ = 0x9E,
-    PushVar = 0xC0,
+    Push = 0xC0,
     Call = 0xD9,
 }
 
