@@ -2,7 +2,7 @@ use crate::bytecode::Opcode;
 use crate::resolver::Variable;
 use num_enum::TryFromPrimitive;
 
-#[derive(Debug, Clone, Copy, TryFromPrimitive)]
+#[derive(Debug, Clone, Copy, TryFromPrimitive, PartialEq)]
 #[repr(u8)]
 pub enum ValueType {
     Double = 0x0,
@@ -35,6 +35,11 @@ pub enum Instruction {
     UnaryOp {
         operand_type: ValueType,
         opcode: Opcode,
+    },
+
+    Conv {
+        from: ValueType,
+        to: ValueType,
     },
 
     Call {

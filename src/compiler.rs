@@ -33,6 +33,12 @@ impl Compiler {
         }
     }
 
+    pub fn emit_conv_if_needed(&mut self, from: ValueType, to: ValueType) {
+        if from != to {
+            self.instructions.push(Instruction::Conv { from, to });
+        }
+    }
+
     fn compile_statement(&mut self, statement: &Statement) {
         match statement {
             Statement::Assignment { name, value } => {
@@ -105,18 +111,25 @@ impl Compiler {
             Expr::Unary { operator, operand } => {
                 self.compile_expression(operand);
 
-                let operand_type = match operator {
-                    UnaryOp::Neg => value_type_from_expr(operand),
-                    UnaryOp::Not => ValueType::Bool,
-                };
+                match operator {
+                    UnaryOp::Neg => {
+                        self.instructions.push(Instruction::UnaryOp {
+                            opcode: Opcode::Neg,
+                            operand_type: value_type_from_expr(operand),
+                        });
+                    }
 
-                self.instructions.push(Instruction::UnaryOp {
-                    opcode: match operator {
-                        UnaryOp::Neg => Opcode::Neg,
-                        UnaryOp::Not => Opcode::Not,
-                    },
-                    operand_type,
-                });
+                    UnaryOp::Not => {
+                        let operand_type = value_type_from_expr(operand);
+
+                        self.emit_conv_if_needed(operand_type, ValueType::Bool);
+
+                        self.instructions.push(Instruction::UnaryOp {
+                            opcode: Opcode::Not,
+                            operand_type: ValueType::Bool,
+                        });
+                    }
+                }
             }
 
             Expr::Call { name, args } => {

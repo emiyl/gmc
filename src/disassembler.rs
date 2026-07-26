@@ -65,6 +65,18 @@ pub fn print_disassembly(bytecode: &Bytecode) {
                     );
                 }
 
+                Opcode::Conv => {
+                    let from_type = ValueType::try_from(instr_type1 as u8).unwrap();
+                    let to_type = ValueType::try_from(instr_type2 as u8).unwrap();
+                    println!(
+                        "{opcode:?}.{from_char}.{to_char} (pops: [{from_str}] -> pushes: [{to_str}])",
+                        from_char = get_type_print(from_type).0,
+                        to_char = get_type_print(to_type).0,
+                        from_str = get_type_print(from_type).1,
+                        to_str = get_type_print(to_type).1
+                    );
+                }
+
                 Opcode::Push => {
                     let type_print =
                         get_type_print(ValueType::try_from(instr_type1 as u8).unwrap());

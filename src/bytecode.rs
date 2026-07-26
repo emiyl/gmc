@@ -3,6 +3,7 @@ use num_enum::TryFromPrimitive;
 #[derive(Debug, TryFromPrimitive)]
 #[repr(u32)]
 pub enum Opcode {
+    Conv = 0x07,
     Mul = 0x08,
     Div = 0x09,
     Rem = 0x0A,
