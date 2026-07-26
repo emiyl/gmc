@@ -11,6 +11,7 @@ pub enum Token {
     Ampersand,
     VerticalBar,
     Caret,
+    Exclamation,
     Tilde,
     LeftAngle,
     RightAngle,
@@ -50,82 +51,33 @@ impl Lexer {
 
         let c = self.input[self.position];
 
-        match c {
-            '*' => {
-                self.position += 1;
-                Token::Asterisk
-            }
-            '/' => {
-                self.position += 1;
-                Token::Slash
-            }
-            '%' => {
-                self.position += 1;
-                Token::Percent
-            }
-            '+' => {
-                self.position += 1;
-                Token::Plus
-            }
-            '-' => {
-                self.position += 1;
-                Token::Minus
-            }
-            '&' => {
-                self.position += 1;
-                Token::Ampersand
-            }
-            '|' => {
-                self.position += 1;
-                Token::VerticalBar
-            }
-            '^' => {
-                self.position += 1;
-                Token::Caret
-            }
-            '~' => {
-                self.position += 1;
-                Token::Tilde
-            }
-            '<' => {
-                self.position += 1;
-                Token::LeftAngle
-            }
-            '>' => {
-                self.position += 1;
-                Token::RightAngle
-            }
-            '=' => {
-                self.position += 1;
-                Token::Equals
-            }
+        let token = match c {
+            '*' => Token::Asterisk,
+            '/' => Token::Slash,
+            '%' => Token::Percent,
+            '+' => Token::Plus,
+            '-' => Token::Minus,
+            '&' => Token::Ampersand,
+            '|' => Token::VerticalBar,
+            '^' => Token::Caret,
+            '~' => Token::Tilde,
+            '<' => Token::LeftAngle,
+            '>' => Token::RightAngle,
+            '=' => Token::Equals,
+            '!' => Token::Exclamation,
+            ';' => Token::Semicolon,
+            '(' => Token::LeftParen,
+            ')' => Token::RightParen,
+            ',' => Token::Comma,
 
-            ';' => {
-                self.position += 1;
-                Token::Semicolon
-            }
-
-            '(' => {
-                self.position += 1;
-                Token::LeftParen
-            }
-
-            ')' => {
-                self.position += 1;
-                Token::RightParen
-            }
-
-            ',' => {
-                self.position += 1;
-                Token::Comma
-            }
-
-            '0'..='9' => self.read_number(),
-
-            'a'..='z' | 'A'..='Z' | '_' => self.read_identifier(),
+            '0'..='9' => return self.read_number(),
+            'a'..='z' | 'A'..='Z' | '_' => return self.read_identifier(),
 
             _ => panic!("Unknown character {}", c),
-        }
+        };
+
+        self.position += 1;
+        token
     }
 
     fn read_number(&mut self) -> Token {

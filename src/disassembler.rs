@@ -13,7 +13,6 @@ fn get_type_print(value: ValueType) -> (char, &'static str) {
         ValueType::Var => ('v', "var"),
         ValueType::String => ('s', "string"),
         ValueType::Int16 => ('e', "int16"),
-        _ => ('?', "unknown"),
     }
 }
 
@@ -110,7 +109,7 @@ pub fn _print_disassembly(bytecode: &Bytecode) {
         let opcode = (instr >> 24) & 0xFF;
         let instr_type1 = (instr >> 20) & 0xF;
         let instr_type2 = (instr >> 16) & 0xF;
-        let instr_instance_type = (instr & 0xFFFF);
+        let instr_instance_type = instr & 0xFFFF;
 
         if let Ok(op) = Opcode::try_from(opcode) {
             if let Some(line) = current.take() {

@@ -96,11 +96,6 @@ pub fn encode(instructions: Vec<Instruction>) -> Bytecode {
                 let popz_word = Word::new(popz_opcode as u8, popz_type1, popz_type2, 0).to_u32();
                 output.write_u32(popz_word);
             }
-
-            _ => {
-                println!("Unsupported instruction: {:?}", instr);
-                output.write_u32(0);
-            }
         }
     }
 
