@@ -57,6 +57,17 @@ pub fn encode(instructions: Vec<Instruction>) -> Bytecode {
                 output.write_u32(word);
             }
 
+            Instruction::UnaryOp {
+                operand_type,
+                opcode,
+            } => {
+                let opcode = opcode;
+                let instr_type1 = operand_type as u8;
+                let instr_type2 = ValueType::Double as u8; // Assuming unary operations don't have a second operand
+                let word = Word::new(opcode as u8, instr_type1, instr_type2, 0).to_u32();
+                output.write_u32(word);
+            }
+
             Instruction::Pop {
                 variable,
                 dst_type,

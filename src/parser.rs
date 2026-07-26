@@ -221,6 +221,24 @@ impl Parser {
                 Expr::Integer(value)
             }
 
+            Token::Exclamation => {
+                self.advance();
+                let operand = self.parse_primary();
+                Expr::Unary {
+                    operator: UnaryOp::Not,
+                    operand: Box::new(operand),
+                }
+            }
+
+            Token::Tilde => {
+                self.advance();
+                let operand = self.parse_primary();
+                Expr::Unary {
+                    operator: UnaryOp::Neg,
+                    operand: Box::new(operand),
+                }
+            }
+
             Token::Identifier(name) => {
                 let name = name.clone();
                 self.advance();

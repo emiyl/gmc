@@ -32,6 +32,11 @@ pub enum Instruction {
         rhs_type: ValueType,
     },
 
+    UnaryOp {
+        operand_type: ValueType,
+        opcode: Opcode,
+    },
+
     Call {
         function: Variable,
     },
