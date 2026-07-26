@@ -25,8 +25,8 @@ pub fn print_disassembly(bytecode: &Bytecode) {
         let instr = u32::from_le_bytes(chunk.try_into().unwrap());
 
         let opcode = (instr >> 24) & 0xFF;
-        let instr_type1 = (instr >> 20) & 0xF;
-        let instr_type2 = (instr >> 16) & 0xF;
+        let instr_type1 = (instr >> 16) & 0xF;
+        let instr_type2 = (instr >> 20) & 0xF;
         let instr_instance_type = instr & 0xFFFF;
         let extra_data: Vec<u32> = chunks[i + 1..]
             .iter()
@@ -76,11 +76,7 @@ pub fn print_disassembly(bytecode: &Bytecode) {
                 }
 
                 Opcode::PushI => {
-                    println!(
-                        "{opcode:?}.{type1_char} (pops: [] -> pushes: [int16])",
-                        type1_char =
-                            get_type_print(ValueType::try_from(instr_type1 as u8).unwrap()).0
-                    )
+                    println!("{opcode:?}.e {instr_instance_type} (pops: [] -> pushes: [int16])");
                 }
 
                 Opcode::Pop => {
