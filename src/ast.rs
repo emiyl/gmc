@@ -2,6 +2,10 @@
 pub enum Expr {
     Integer(i32),
     Variable(String),
+    Call {
+        name: String,
+        args: Vec<Expr>,
+    },
 
     Binary {
         left: Box<Expr>,
@@ -18,4 +22,5 @@ pub enum BinaryOp {
 #[derive(Debug)]
 pub enum Statement {
     Assignment { name: String, value: Expr },
+    Expression(Expr),
 }

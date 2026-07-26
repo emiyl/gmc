@@ -8,9 +8,14 @@ pub enum Token {
     Equals,
     Semicolon,
 
+    LeftParen,
+    RightParen,
+    Comma,
+
     EOF,
 }
 
+#[derive(Debug)]
 pub struct Lexer {
     input: Vec<char>,
     position: usize,
@@ -49,6 +54,21 @@ impl Lexer {
             ';' => {
                 self.position += 1;
                 Token::Semicolon
+            }
+
+            '(' => {
+                self.position += 1;
+                Token::LeftParen
+            }
+
+            ')' => {
+                self.position += 1;
+                Token::RightParen
+            }
+
+            ',' => {
+                self.position += 1;
+                Token::Comma
             }
 
             '0'..='9' => self.read_number(),

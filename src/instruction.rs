@@ -3,10 +3,14 @@ use crate::resolver::Variable;
 #[derive(Debug, Clone, Copy)]
 #[repr(u8)]
 pub enum ValueType {
-    None = 0x0,
-    Int = 0x2,
+    Double = 0x0,
+    Float = 0x1,
+    Int32 = 0x2,
+    Int64 = 0x3,
+    Bool = 0x4,
     Var = 0x5,
-    F = 0xF,
+    String = 0x6,
+    Int16 = 0xF,
 }
 
 #[derive(Debug)]
@@ -23,5 +27,9 @@ pub enum Instruction {
     Add {
         lhs_type: ValueType,
         rhs_type: ValueType,
+    },
+
+    Call {
+        function: Variable,
     },
 }

@@ -35,8 +35,8 @@ pub fn encode(instructions: Vec<Instruction>) -> Bytecode {
         match instr {
             Instruction::PushI(value) => {
                 let opcode = Opcode::PushI;
-                let instr_type1 = ValueType::F as u8;
-                let instr_type2 = ValueType::None as u8;
+                let instr_type1 = ValueType::Int16 as u8;
+                let instr_type2 = ValueType::Double as u8;
 
                 let value_bytes = (value as u16).to_le_bytes();
                 let value_u16 = u16::from_le_bytes(value_bytes);
@@ -70,11 +70,27 @@ pub fn encode(instructions: Vec<Instruction>) -> Bytecode {
             Instruction::PushVar(var) => {
                 let opcode = Opcode::PushVar as u16;
                 let type1 = ValueType::Var as u8;
-                let type2 = ValueType::None as u8;
+                let type2 = ValueType::Double as u8;
                 let vari = vari::encode_variable(&var);
                 let word = Word::new(opcode as u8, type1, type2, vari).to_u32();
                 output.write_u32(word);
                 output.write_u32(var.var_ref);
+            }
+
+            Instruction::Call { function } => {
+                let opcode = Opcode::Call as u16;
+                let type1 = ValueType::Var as u8;
+                let type2 = ValueType::Double as u8;
+                let word = Word::new(opcode as u8, type1, type2, 0).to_u32();
+                output.write_u32(word);
+                output.write_u32(function.var_ref);
+
+                // PopZ after this
+                let popz_opcode = Opcode::PopZ as u16;
+                let popz_type1 = ValueType::Var as u8;
+                let popz_type2 = ValueType::Double as u8;
+                let popz_word = Word::new(popz_opcode as u8, popz_type1, popz_type2, 0).to_u32();
+                output.write_u32(popz_word);
             }
 
             _ => {

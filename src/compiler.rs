@@ -4,9 +4,10 @@ use crate::resolver::Variable;
 
 fn value_type_from_expr(expr: &Expr) -> ValueType {
     match expr {
-        Expr::Integer(_) => ValueType::Int,
+        Expr::Integer(_) => ValueType::Int32,
         Expr::Variable(_) => ValueType::Var,
         Expr::Binary { .. } => ValueType::Var, // Assuming binary expressions result in a variable type
+        Expr::Call { .. } => ValueType::Var,   // Assuming function calls result in a variable type
     }
 }
 
@@ -45,6 +46,9 @@ impl Compiler {
                     src_type,
                 });
             }
+            Statement::Expression(expr) => {
+                self.compile_expression(expr);
+            }
         }
     }
 
@@ -82,6 +86,19 @@ impl Compiler {
                         });
                     }
                 }
+            }
+
+            Expr::Call { name, args } => {
+                for arg in args {
+                    self.compile_expression(arg);
+                }
+
+                let var = Variable {
+                    name: name.clone(),
+                    var_ref: 0,
+                };
+
+                self.instructions.push(Instruction::Call { function: var });
             }
         }
     }
