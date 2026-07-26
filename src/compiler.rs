@@ -8,8 +8,11 @@ fn value_type_from_expr(expr: &Expr) -> ValueType {
         Expr::Integer(_) => ValueType::Int32,
         Expr::Variable(_) => ValueType::Var,
         Expr::Binary { .. } => ValueType::Var, // Assuming binary expressions result in a variable type
-        Expr::Unary { .. } => ValueType::Var, // Assuming unary expressions result in a variable type
-        Expr::Call { .. } => ValueType::Var,  // Assuming function calls result in a variable type
+        Expr::Unary { operator, operand } => match operator {
+            UnaryOp::Neg => value_type_from_expr(operand),
+            UnaryOp::Not => ValueType::Bool,
+        },
+        Expr::Call { .. } => ValueType::Var, // Assuming function calls result in a variable type
     }
 }
 
@@ -102,7 +105,10 @@ impl Compiler {
             Expr::Unary { operator, operand } => {
                 self.compile_expression(operand);
 
-                let operand_type = value_type_from_expr(operand);
+                let operand_type = match operator {
+                    UnaryOp::Neg => value_type_from_expr(operand),
+                    UnaryOp::Not => ValueType::Bool,
+                };
 
                 self.instructions.push(Instruction::UnaryOp {
                     opcode: match operator {

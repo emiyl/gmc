@@ -69,14 +69,19 @@ pub fn print_disassembly(bytecode: &Bytecode) {
                     let type_print =
                         get_type_print(ValueType::try_from(instr_type1 as u8).unwrap());
                     println!(
-                        "{opcode:?}.{type1_char} (pops: [] -> pushes: [{type1_str}])",
+                        "{opcode:?}.{type1_char} 0x{extra_data:8X} (pops: [] -> pushes: [{type1_str}])",
                         type1_char = type_print.0,
-                        type1_str = type_print.1
+                        type1_str = type_print.1,
+                        extra_data = extra_data[0]
                     );
                 }
 
                 Opcode::PushI => {
-                    println!("{opcode:?}.e {instr_instance_type} (pops: [] -> pushes: [int16])");
+                    println!(
+                        "{opcode:?}.{type1_char} {instr_instance_type} (pops: [] -> pushes: [int16])",
+                        type1_char =
+                            get_type_print(ValueType::try_from(instr_type1 as u8).unwrap()).0
+                    );
                 }
 
                 Opcode::Pop => {
