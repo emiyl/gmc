@@ -1,5 +1,6 @@
 use crate::{
     bytecode::{Bytecode, Opcode},
+    encoder::Word,
     instruction::ValueType,
 };
 
@@ -23,17 +24,18 @@ pub fn print_disassembly(bytecode: &Bytecode) {
 
     for (i, &chunk) in chunks.iter().enumerate() {
         let instr = u32::from_le_bytes(chunk.try_into().unwrap());
+        let word = Word::from_u32(instr);
 
-        let opcode = (instr >> 24) & 0xFF;
-        let instr_type1 = (instr >> 16) & 0xF;
-        let instr_type2 = (instr >> 20) & 0xF;
-        let instr_instance_type = instr & 0xFFFF;
+        let opcode = word.opcode;
+        let instr_type1 = word.instr_type1;
+        let instr_type2 = word.instr_type2;
+        let instr_instance_type = word.instr_instance_type;
         let extra_data: Vec<u32> = chunks[i + 1..]
             .iter()
             .map(|&chunk| u32::from_le_bytes(chunk.try_into().unwrap()))
             .collect();
 
-        if let Ok(opcode) = Opcode::try_from(opcode) {
+        if let Ok(opcode) = Opcode::try_from(opcode as u32) {
             let offset = i * 4;
             log::debug!(
                 "{offset:04X}: [0x{instr:08X}] {rest_of_log}",
@@ -93,11 +95,11 @@ pub fn print_disassembly(bytecode: &Bytecode) {
 
                     Opcode::PushI => {
                         format!(
-                            "{opcode:?}.{type1_char} {num} (pops: [] -> pushes: [{type1_str}])",
-                            type1_char =
-                                get_type_print(ValueType::try_from(instr_type1 as u8).unwrap()).0,
-                            type1_str =
-                                get_type_print(ValueType::try_from(instr_type1 as u8).unwrap()).1,
+                            "{opcode:?}.{type2_char} {num} (pops: [] -> pushes: [{type2_str}])",
+                            type2_char =
+                                get_type_print(ValueType::try_from(instr_type2 as u8).unwrap()).0,
+                            type2_str =
+                                get_type_print(ValueType::try_from(instr_type2 as u8).unwrap()).1,
                             num = instr_instance_type
                         )
                     }
