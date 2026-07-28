@@ -99,8 +99,8 @@ pub fn encode(instructions: Vec<Instruction>) -> Bytecode {
                     BinaryOp::Gte => Opcode::Cmp,
                     BinaryOp::Gt => Opcode::Cmp,
                 };
-                let instr_type1 = lhs_type as u8;
-                let instr_type2 = rhs_type as u8;
+                let instr_type1 = rhs_type as u8;
+                let instr_type2 = lhs_type as u8;
                 let instr_instance_type = match binary_op {
                     BinaryOp::Lt => CmpType::Lt,
                     BinaryOp::Lte => CmpType::Lte,

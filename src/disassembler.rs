@@ -64,9 +64,9 @@ pub fn print_disassembly(bytecode: &Bytecode) {
 
                     Opcode::Neg | Opcode::Not => {
                         format!(
-                            "{opcode:?}.{type1_char} (pops: [a] -> pushes: [result])",
-                            type1_char =
-                                get_type_print(ValueType::try_from(instr_type1 as u8).unwrap()).0
+                            "{opcode:?}.{type2_char} (pops: [a] -> pushes: [result])",
+                            type2_char =
+                                get_type_print(ValueType::try_from(instr_type2 as u8).unwrap()).0
                         )
                     }
 
@@ -103,7 +103,7 @@ pub fn print_disassembly(bytecode: &Bytecode) {
                         let type_print =
                             get_type_print(ValueType::try_from(instr_type2 as u8).unwrap());
                         format!(
-                            "{opcode:?}.{type2_char} 0x{extra_data:8X} (pops: [] -> pushes: [{type2_str}])",
+                            "{opcode:?}.{type2_char} 0x{extra_data:8X} (pushes: [{type2_str}])",
                             type2_char = type_print.0,
                             type2_str = type_print.1,
                             extra_data = extra_data[0]
@@ -112,7 +112,7 @@ pub fn print_disassembly(bytecode: &Bytecode) {
 
                     Opcode::PushI => {
                         format!(
-                            "{opcode:?}.{type2_char} {num} (pops: [] -> pushes: [{type2_str}])",
+                            "{opcode:?}.{type2_char} {num} (pushes: [{type2_str}])",
                             type2_char =
                                 get_type_print(ValueType::try_from(instr_type2 as u8).unwrap()).0,
                             type2_str =
@@ -123,13 +123,14 @@ pub fn print_disassembly(bytecode: &Bytecode) {
 
                     Opcode::Pop => {
                         format!(
-                            "{opcode:?}.{type2_char}.{type1_char} (pops: [{type2_str}] -> pushes: [])",
+                            "{opcode:?}.{type2_char}.{type1_char} 0x{extra_data:8X} (pops: [{type2_str}])",
                             type2_char =
                                 get_type_print(ValueType::try_from(instr_type2 as u8).unwrap()).0,
                             type1_char =
                                 get_type_print(ValueType::try_from(instr_type1 as u8).unwrap()).0,
                             type2_str =
                                 get_type_print(ValueType::try_from(instr_type2 as u8).unwrap()).1,
+                            extra_data = extra_data[0]
                         )
                     }
 
