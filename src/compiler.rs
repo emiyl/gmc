@@ -19,7 +19,12 @@ fn value_type_from_expr(expr: &Expr) -> ValueType {
             | BinaryOp::Xor
             | BinaryOp::Shl
             | BinaryOp::Shr => ValueType::Int32,
-            BinaryOp::Eq => ValueType::Bool,
+            BinaryOp::Lt
+            | BinaryOp::Lte
+            | BinaryOp::Eq
+            | BinaryOp::Neq
+            | BinaryOp::Gte
+            | BinaryOp::Gt => ValueType::Bool,
         },
         Expr::Unary { operator, operand } => match operator {
             UnaryOp::Neg => value_type_from_expr(operand),

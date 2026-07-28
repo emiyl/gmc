@@ -172,31 +172,75 @@ impl Parser {
                 Token::LeftAngle => {
                     self.advance();
 
-                    if self.current == Token::LeftAngle {
-                        self.advance();
+                    match self.current {
+                        Token::LeftAngle => {
+                            self.advance();
 
-                        let right = self.parse_primary();
+                            let right = self.parse_primary();
 
-                        left = Expr::Binary {
-                            left: Box::new(left),
-                            operator: BinaryOp::Shl,
-                            right: Box::new(right),
-                        };
+                            left = Expr::Binary {
+                                left: Box::new(left),
+                                operator: BinaryOp::Shl,
+                                right: Box::new(right),
+                            };
+                        }
+                        Token::Equals => {
+                            self.advance();
+
+                            let right = self.parse_primary();
+
+                            left = Expr::Binary {
+                                left: Box::new(left),
+                                operator: BinaryOp::Lte,
+                                right: Box::new(right),
+                            };
+                        }
+                        _ => {
+                            let right = self.parse_primary();
+
+                            left = Expr::Binary {
+                                left: Box::new(left),
+                                operator: BinaryOp::Lt,
+                                right: Box::new(right),
+                            };
+                        }
                     }
                 }
                 Token::RightAngle => {
                     self.advance();
 
-                    if self.current == Token::RightAngle {
-                        self.advance();
+                    match self.current {
+                        Token::RightAngle => {
+                            self.advance();
 
-                        let right = self.parse_primary();
+                            let right = self.parse_primary();
 
-                        left = Expr::Binary {
-                            left: Box::new(left),
-                            operator: BinaryOp::Shr,
-                            right: Box::new(right),
-                        };
+                            left = Expr::Binary {
+                                left: Box::new(left),
+                                operator: BinaryOp::Shr,
+                                right: Box::new(right),
+                            };
+                        }
+                        Token::Equals => {
+                            self.advance();
+
+                            let right = self.parse_primary();
+
+                            left = Expr::Binary {
+                                left: Box::new(left),
+                                operator: BinaryOp::Gte,
+                                right: Box::new(right),
+                            };
+                        }
+                        _ => {
+                            let right = self.parse_primary();
+
+                            left = Expr::Binary {
+                                left: Box::new(left),
+                                operator: BinaryOp::Gt,
+                                right: Box::new(right),
+                            };
+                        }
                     }
                 }
                 Token::Equals => {
@@ -210,6 +254,21 @@ impl Parser {
                         left = Expr::Binary {
                             left: Box::new(left),
                             operator: BinaryOp::Eq,
+                            right: Box::new(right),
+                        };
+                    }
+                }
+                Token::Exclamation => {
+                    self.advance();
+
+                    if self.current == Token::Equals {
+                        self.advance();
+
+                        let right = self.parse_primary();
+
+                        left = Expr::Binary {
+                            left: Box::new(left),
+                            operator: BinaryOp::Neq,
                             right: Box::new(right),
                         };
                     }

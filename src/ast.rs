@@ -32,7 +32,12 @@ pub enum BinaryOp {
     Xor,
     Shl,
     Shr,
+    Lt,
+    Lte,
     Eq,
+    Neq,
+    Gte,
+    Gt,
 }
 
 #[derive(Debug)]

@@ -92,14 +92,24 @@ pub fn encode(instructions: Vec<Instruction>) -> Bytecode {
                     BinaryOp::Xor => Opcode::Xor,
                     BinaryOp::Shl => Opcode::Shl,
                     BinaryOp::Shr => Opcode::Shr,
+                    BinaryOp::Lt => Opcode::Cmp,
+                    BinaryOp::Lte => Opcode::Cmp,
                     BinaryOp::Eq => Opcode::Cmp,
+                    BinaryOp::Neq => Opcode::Cmp,
+                    BinaryOp::Gte => Opcode::Cmp,
+                    BinaryOp::Gt => Opcode::Cmp,
                 };
                 let instr_type1 = lhs_type as u8;
                 let instr_type2 = rhs_type as u8;
                 let instr_instance_type = match binary_op {
-                    BinaryOp::Eq => CmpType::Eq as u16,
-                    _ => 0,
-                };
+                    BinaryOp::Lt => CmpType::Lt,
+                    BinaryOp::Lte => CmpType::Lte,
+                    BinaryOp::Eq => CmpType::Eq,
+                    BinaryOp::Neq => CmpType::Neq,
+                    BinaryOp::Gte => CmpType::Gte,
+                    BinaryOp::Gt => CmpType::Gt,
+                    _ => CmpType::None,
+                } as u16;
                 let word =
                     Word::new(opcode as u8, instr_type1, instr_type2, instr_instance_type).to_u32();
                 output.write_u32(word);
