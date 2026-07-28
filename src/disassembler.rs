@@ -93,12 +93,12 @@ pub fn print_disassembly(bytecode: &Bytecode) {
 
                     Opcode::PushI => {
                         format!(
-                            "{opcode:?}.{type1_char} 0x{extra_data:8X} (pops: [] -> pushes: [{type1_str}])",
+                            "{opcode:?}.{type1_char} {num} (pops: [] -> pushes: [{type1_str}])",
                             type1_char =
                                 get_type_print(ValueType::try_from(instr_type1 as u8).unwrap()).0,
                             type1_str =
                                 get_type_print(ValueType::try_from(instr_type1 as u8).unwrap()).1,
-                            extra_data = extra_data[0]
+                            num = instr_instance_type
                         )
                     }
 
