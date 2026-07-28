@@ -1,3 +1,4 @@
+use crate::ast::BinaryOp;
 use crate::bytecode::Opcode;
 use crate::resolver::Variable;
 use num_enum::TryFromPrimitive;
@@ -28,7 +29,7 @@ pub enum Instruction {
 
     BinaryOp {
         lhs_type: ValueType,
-        opcode: Opcode,
+        binary_op: BinaryOp,
         rhs_type: ValueType,
     },
 

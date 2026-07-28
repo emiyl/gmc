@@ -6,13 +6,13 @@ use crate::lexer::{Lexer, Token};
 pub struct Parser {
     lexer: Lexer,
     current: Token,
-    next: Token,
+    next: Vec<Token>,
 }
 
 impl Parser {
     pub fn new(mut lexer: Lexer) -> Self {
         let current = lexer.next_token();
-        let next = lexer.next_token();
+        let next = vec![lexer.next_token(), lexer.next_token()];
 
         Self {
             lexer,
@@ -22,11 +22,18 @@ impl Parser {
     }
 
     fn advance(&mut self) {
-        self.current = std::mem::replace(&mut self.next, self.lexer.next_token());
+        self.current = self.next.remove(0);
+        self.next.push(self.lexer.next_token());
     }
 
-    fn peek(&self) -> &Token {
-        &self.next
+    fn peek(&self, n: usize) -> &Token {
+        if n == 0 {
+            &self.current
+        } else if n > 0 && n <= self.next.len() {
+            &self.next[n - 1]
+        } else {
+            panic!("Peek out of bounds: {}", n);
+        }
     }
 
     fn expect(&mut self, expected: Token) {
@@ -51,7 +58,7 @@ impl Parser {
         if let Token::Identifier(name) = &self.current {
             let name = name.clone();
 
-            if *self.peek() == Token::Equals {
+            if *self.peek(1) == Token::Equals && *self.peek(2) != Token::Equals {
                 self.advance(); // identifier
                 self.advance(); // '='
 
@@ -188,6 +195,21 @@ impl Parser {
                         left = Expr::Binary {
                             left: Box::new(left),
                             operator: BinaryOp::Shr,
+                            right: Box::new(right),
+                        };
+                    }
+                }
+                Token::Equals => {
+                    self.advance();
+
+                    if self.current == Token::Equals {
+                        self.advance();
+
+                        let right = self.parse_primary();
+
+                        left = Expr::Binary {
+                            left: Box::new(left),
+                            operator: BinaryOp::Eq,
                             right: Box::new(right),
                         };
                     }

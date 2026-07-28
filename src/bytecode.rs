@@ -17,6 +17,7 @@ pub enum Opcode {
     Not = 0x12,
     Shl = 0x13,
     Shr = 0x14,
+    Cmp = 0x15,
     Pop = 0x45,
     PushI = 0x84,
     PopZ = 0x9E,

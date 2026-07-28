@@ -7,7 +7,20 @@ fn value_type_from_expr(expr: &Expr) -> ValueType {
     match expr {
         Expr::Integer(_) => ValueType::Int32,
         Expr::Variable(_) => ValueType::Var,
-        Expr::Binary { .. } => ValueType::Var, // Assuming binary expressions result in a variable type
+        Expr::Binary { operator, .. } => match operator {
+            BinaryOp::Mul
+            | BinaryOp::Div
+            | BinaryOp::Rem
+            | BinaryOp::Mod
+            | BinaryOp::Add
+            | BinaryOp::Sub
+            | BinaryOp::And
+            | BinaryOp::Or
+            | BinaryOp::Xor
+            | BinaryOp::Shl
+            | BinaryOp::Shr => ValueType::Int32,
+            BinaryOp::Eq => ValueType::Bool,
+        },
         Expr::Unary { operator, operand } => match operator {
             UnaryOp::Neg => value_type_from_expr(operand),
             UnaryOp::Not => ValueType::Bool,
@@ -91,19 +104,7 @@ impl Compiler {
 
                 self.instructions.push(Instruction::BinaryOp {
                     lhs_type,
-                    opcode: match operator {
-                        BinaryOp::Mul => Opcode::Mul,
-                        BinaryOp::Div => Opcode::Div,
-                        BinaryOp::Rem => Opcode::Rem,
-                        BinaryOp::Mod => Opcode::Mod,
-                        BinaryOp::Add => Opcode::Add,
-                        BinaryOp::Sub => Opcode::Sub,
-                        BinaryOp::And => Opcode::And,
-                        BinaryOp::Or => Opcode::Or,
-                        BinaryOp::Xor => Opcode::Xor,
-                        BinaryOp::Shl => Opcode::Shl,
-                        BinaryOp::Shr => Opcode::Shr,
-                    },
+                    binary_op: operator.clone(),
                     rhs_type,
                 });
             }

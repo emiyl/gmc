@@ -12,13 +12,14 @@ pub enum Expr {
         operator: BinaryOp,
         right: Box<Expr>,
     },
+
     Unary {
         operator: UnaryOp,
         operand: Box<Expr>,
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BinaryOp {
     Mul,
     Div,
@@ -31,6 +32,7 @@ pub enum BinaryOp {
     Xor,
     Shl,
     Shr,
+    Eq,
 }
 
 #[derive(Debug)]
