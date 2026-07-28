@@ -1,6 +1,6 @@
 use crate::{
     bytecode::{Bytecode, Opcode},
-    encoder::Word,
+    encoder::{CmpType, Word},
     instruction::ValueType,
 };
 
@@ -82,13 +82,30 @@ pub fn print_disassembly(bytecode: &Bytecode) {
                         )
                     }
 
+                    Opcode::Cmp => {
+                        let type1_print =
+                            get_type_print(ValueType::try_from(instr_type1 as u8).unwrap());
+                        let type2_print =
+                            get_type_print(ValueType::try_from(instr_type2 as u8).unwrap());
+                        let cmp_type =
+                            CmpType::try_from(instr_instance_type).unwrap_or(CmpType::None);
+                        format!(
+                            "{opcode:?}.{type1_char}.{type2_char} {cmp_type:?} (pops: [{type1_str}, {type2_str}] -> pushes: [bool]",
+                            type1_char = type1_print.0,
+                            type2_char = type2_print.0,
+                            cmp_type = cmp_type,
+                            type1_str = type1_print.1,
+                            type2_str = type2_print.1,
+                        )
+                    }
+
                     Opcode::Push => {
                         let type_print =
-                            get_type_print(ValueType::try_from(instr_type1 as u8).unwrap());
+                            get_type_print(ValueType::try_from(instr_type2 as u8).unwrap());
                         format!(
-                            "{opcode:?}.{type1_char} 0x{extra_data:8X} (pops: [] -> pushes: [{type1_str}])",
-                            type1_char = type_print.0,
-                            type1_str = type_print.1,
+                            "{opcode:?}.{type2_char} 0x{extra_data:8X} (pops: [] -> pushes: [{type2_str}])",
+                            type2_char = type_print.0,
+                            type2_str = type_print.1,
                             extra_data = extra_data[0]
                         )
                     }
@@ -106,11 +123,13 @@ pub fn print_disassembly(bytecode: &Bytecode) {
 
                     Opcode::Pop => {
                         format!(
-                            "{opcode:?}.{type1_char} (pops: [{type1_str}] -> pushes: [])",
+                            "{opcode:?}.{type2_char}.{type1_char} (pops: [{type2_str}] -> pushes: [])",
+                            type2_char =
+                                get_type_print(ValueType::try_from(instr_type2 as u8).unwrap()).0,
                             type1_char =
                                 get_type_print(ValueType::try_from(instr_type1 as u8).unwrap()).0,
-                            type1_str =
-                                get_type_print(ValueType::try_from(instr_type1 as u8).unwrap()).1
+                            type2_str =
+                                get_type_print(ValueType::try_from(instr_type2 as u8).unwrap()).1,
                         )
                     }
 
