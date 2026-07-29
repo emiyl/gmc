@@ -108,19 +108,17 @@ impl Parser {
         if let Token::Identifier(name) = &self.current {
             let name = name.clone();
 
-            match self.peek(1) {
-                Token::Equals => return self.parse_assignment(name),
-                Token::LeftParen => {
-                    let expr = self.parse_expression();
-                    self.expect(Token::Semicolon);
-                    return Statement::Expression(expr);
-                }
-                _ => {}
-            }
-
             match name.as_str() {
                 "if" => return self.parse_if_statement(),
-                _ => {}
+                _ => match self.peek(1) {
+                    Token::Equals => return self.parse_assignment(name),
+                    Token::LeftParen => {
+                        let expr = self.parse_expression();
+                        self.expect(Token::Semicolon);
+                        return Statement::Expression(expr);
+                    }
+                    _ => {}
+                },
             };
 
             panic!("Unexpected identifier: {}", name);
