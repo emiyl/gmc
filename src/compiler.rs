@@ -61,22 +61,84 @@ impl Compiler {
         match statement {
             Statement::Assignment { name, value } => {
                 self.compile_expression(value);
+
                 let var = Variable {
                     name: name.clone(),
                     var_ref: 0,
                 };
 
-                let dst_type = ValueType::Var;
-                let src_type = value_type_from_expr(value);
-
                 self.instructions.push(Instruction::Pop {
                     variable: var,
-                    dst_type,
-                    src_type,
+                    dst_type: ValueType::Var,
+                    src_type: value_type_from_expr(value),
                 });
             }
+
             Statement::Expression(expr) => {
                 self.compile_expression(expr);
+            }
+
+            Statement::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                // Evaluate the condition.
+                self.compile_expression(condition);
+
+                let condition_type = value_type_from_expr(condition);
+                self.emit_conv_if_needed(condition_type, ValueType::Bool);
+
+                // BF <else/end>
+                let branch_false_index = self.instructions.len();
+                self.instructions
+                    .push(Instruction::Branch(0, BranchType::False));
+
+                // Then block.
+                for stmt in then_branch.iter() {
+                    self.compile_statement(stmt);
+                }
+
+                if let Some(else_branch) = else_branch {
+                    // B <end>
+                    let branch_end_index = self.instructions.len();
+                    self.instructions
+                        .push(Instruction::Branch(0, BranchType::Unconditional));
+
+                    // Else starts immediately after the unconditional branch.
+                    let else_start_index = self.instructions.len();
+
+                    // Patch BF -> else.
+                    if let Some(Instruction::Branch(offset, BranchType::False)) =
+                        self.instructions.get_mut(branch_false_index)
+                    {
+                        *offset = (else_start_index - branch_false_index + 1) as u16;
+                    }
+
+                    // Else block.
+                    for stmt in else_branch.iter() {
+                        self.compile_statement(stmt);
+                    }
+
+                    // End of if/else.
+                    let end_index = self.instructions.len();
+
+                    // Patch B -> end.
+                    if let Some(Instruction::Branch(offset, BranchType::Unconditional)) =
+                        self.instructions.get_mut(branch_end_index)
+                    {
+                        *offset = (end_index - branch_end_index + 1) as u16;
+                    }
+                } else {
+                    // No else: BF jumps directly to the end.
+                    let end_index = self.instructions.len();
+
+                    if let Some(Instruction::Branch(offset, BranchType::False)) =
+                        self.instructions.get_mut(branch_false_index)
+                    {
+                        *offset = (end_index - branch_false_index + 1) as u16;
+                    }
+                }
             }
         }
     }

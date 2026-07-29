@@ -1,7 +1,7 @@
 use crate::{
     bytecode::{Bytecode, Opcode},
-    encoder::{CmpType, Word},
-    instruction::ValueType,
+    encoder::Word,
+    instruction::{CmpType, ValueType},
 };
 
 fn get_type_print(value: ValueType) -> (char, &'static str) {
@@ -36,10 +36,10 @@ pub fn print_disassembly(bytecode: &Bytecode) {
             .collect();
 
         if let Ok(opcode) = Opcode::try_from(opcode as u32) {
-            let offset = i * 4;
+            let pc = i * 4;
             log::debug!(
                 "{offset:04X}: [0x{instr:08X}] {rest_of_log}",
-                offset = offset,
+                offset = pc,
                 instr = instr,
                 rest_of_log = match opcode {
                     Opcode::Add
@@ -90,7 +90,7 @@ pub fn print_disassembly(bytecode: &Bytecode) {
                         let cmp_type =
                             CmpType::try_from(instr_instance_type).unwrap_or(CmpType::None);
                         format!(
-                            "{opcode:?}.{type1_char}.{type2_char} {cmp_type:?} (pops: [{type1_str}, {type2_str}] -> pushes: [bool]",
+                            "{opcode:?}.{type2_char}.{type1_char} {cmp_type:?} (pops: [{type2_str}, {type1_str}] -> pushes: [bool]",
                             type1_char = type1_print.0,
                             type2_char = type2_print.0,
                             cmp_type = cmp_type,
@@ -131,6 +131,16 @@ pub fn print_disassembly(bytecode: &Bytecode) {
                             type2_str =
                                 get_type_print(ValueType::try_from(instr_type2 as u8).unwrap()).1,
                             extra_data = extra_data[0]
+                        )
+                    }
+
+                    Opcode::Branch | Opcode::BranchTrue | Opcode::BranchFalse => {
+                        let offset = instr_instance_type as i32; // Interpret as signed
+                        let target = (pc as i32 + offset * 4) as u32;
+                        format!(
+                            "{opcode:?} L_{target:04X} (offset: {offset:+})",
+                            target = target,
+                            offset = offset
                         )
                     }
 

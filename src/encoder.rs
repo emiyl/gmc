@@ -3,20 +3,6 @@ use crate::bytecode::*;
 use crate::instruction::*;
 use crate::vari;
 
-use num_enum::TryFromPrimitive;
-
-#[derive(Debug, TryFromPrimitive)]
-#[repr(u16)]
-pub enum CmpType {
-    None = 0x000,
-    Lt = 0x100,
-    Lte = 0x200,
-    Eq = 0x300,
-    Neq = 0x400,
-    Gte = 0x500,
-    Gt = 0x600,
-}
-
 #[derive(Debug)]
 pub struct Word {
     pub opcode: u8,
@@ -72,6 +58,26 @@ pub fn encode(instructions: Vec<Instruction>) -> Bytecode {
                 let value_u16 = u16::from_le_bytes(value_bytes);
 
                 let word = Word::new(opcode as u8, instr_type1, instr_type2, value_u16).to_u32();
+                output.write_u32(word);
+            }
+
+            Instruction::Push(var) => {
+                let opcode = Opcode::Push as u16;
+                let type1 = ValueType::Var as u8;
+                let type2 = ValueType::Double as u8;
+                let vari = vari::encode_variable(&var);
+                let word = Word::new(opcode as u8, type1, type2, vari).to_u32();
+                output.write_u32(word);
+                output.write_u32(var.var_ref);
+            }
+
+            Instruction::Branch(offset, branch_type) => {
+                let opcode = match branch_type {
+                    BranchType::Unconditional => Opcode::Branch,
+                    BranchType::True => Opcode::BranchTrue,
+                    BranchType::False => Opcode::BranchFalse,
+                } as u16;
+                let word = Word::new(opcode as u8, 0, 0, offset as u16).to_u32();
                 output.write_u32(word);
             }
 
@@ -138,16 +144,6 @@ pub fn encode(instructions: Vec<Instruction>) -> Bytecode {
                 let word = Word::new(opcode as u8, type1, type2, vari).to_u32();
                 output.write_u32(word);
                 output.write_u32(variable.var_ref);
-            }
-
-            Instruction::Push(var) => {
-                let opcode = Opcode::Push as u16;
-                let type1 = ValueType::Var as u8;
-                let type2 = ValueType::Double as u8;
-                let vari = vari::encode_variable(&var);
-                let word = Word::new(opcode as u8, type1, type2, vari).to_u32();
-                output.write_u32(word);
-                output.write_u32(var.var_ref);
             }
 
             Instruction::Conv { from, to } => {

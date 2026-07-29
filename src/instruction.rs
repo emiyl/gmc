@@ -16,10 +16,31 @@ pub enum ValueType {
     Int16 = 0xF,
 }
 
+#[derive(Debug, TryFromPrimitive)]
+#[repr(u16)]
+pub enum CmpType {
+    None = 0x000,
+    Lt = 0x100,
+    Lte = 0x200,
+    Eq = 0x300,
+    Neq = 0x400,
+    Gte = 0x500,
+    Gt = 0x600,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum BranchType {
+    Unconditional,
+    True,
+    False,
+}
+
 #[derive(Debug)]
 pub enum Instruction {
     PushI(i32),
     Push(Variable),
+
+    Branch(u16, BranchType),
 
     Pop {
         variable: Variable,

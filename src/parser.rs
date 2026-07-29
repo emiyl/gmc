@@ -48,25 +48,68 @@ impl Parser {
         let mut statements = Vec::new();
 
         while self.current != Token::EOF {
-            statements.push(self.parse_statement());
+            let block = self.parse_block();
+            statements.extend(block);
         }
 
         statements
+    }
+
+    fn parse_block(&mut self) -> Vec<Statement> {
+        if self.current != Token::LeftBrace {
+            return vec![self.parse_statement()];
+        }
+
+        self.expect(Token::LeftBrace);
+        let mut statements = Vec::new();
+
+        while self.current != Token::RightBrace {
+            statements.push(self.parse_statement());
+        }
+
+        self.expect(Token::RightBrace);
+        statements
+    }
+
+    fn parse_if_statement(&mut self) -> Statement {
+        self.advance(); // consume 'if'
+        self.expect(Token::LeftParen);
+        let condition = self.parse_expression();
+        self.expect(Token::RightParen);
+
+        let then_branch = Box::new(self.parse_block());
+
+        let else_branch = if self.current == Token::Identifier("else".to_string()) {
+            self.advance(); // consume 'else'
+            Some(Box::new(self.parse_block()))
+        } else {
+            None
+        };
+
+        Statement::If {
+            condition,
+            then_branch,
+            else_branch,
+        }
+    }
+
+    fn parse_assignment(&mut self, name: String) -> Statement {
+        self.advance(); // consume identifier
+        self.expect(Token::Equals);
+        let value = self.parse_expression();
+        self.expect(Token::Semicolon);
+
+        Statement::Assignment { name, value }
     }
 
     fn parse_statement(&mut self) -> Statement {
         if let Token::Identifier(name) = &self.current {
             let name = name.clone();
 
-            if *self.peek(1) == Token::Equals && *self.peek(2) != Token::Equals {
-                self.advance(); // identifier
-                self.advance(); // '='
-
-                let value = self.parse_expression();
-                self.expect(Token::Semicolon);
-
-                return Statement::Assignment { name, value };
-            }
+            return match name.as_str() {
+                "if" => self.parse_if_statement(),
+                _ => self.parse_assignment(name),
+            };
         }
 
         // Otherwise, it's an expression statement.

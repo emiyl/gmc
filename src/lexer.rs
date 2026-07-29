@@ -21,6 +21,8 @@ pub enum Token {
 
     LeftParen,
     RightParen,
+    LeftBrace,
+    RightBrace,
     Comma,
 
     EOF,
@@ -69,6 +71,8 @@ impl Lexer {
             '(' => Token::LeftParen,
             ')' => Token::RightParen,
             ',' => Token::Comma,
+            '{' => Token::LeftBrace,
+            '}' => Token::RightBrace,
 
             '0'..='9' => return self.read_number(),
             'a'..='z' | 'A'..='Z' | '_' => return self.read_identifier(),

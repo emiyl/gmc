@@ -1,7 +1,22 @@
 #[derive(Debug)]
+pub enum Statement {
+    Assignment {
+        name: String,
+        value: Expr,
+    },
+    If {
+        condition: Expr,
+        then_branch: Box<Vec<Statement>>,
+        else_branch: Option<Box<Vec<Statement>>>,
+    },
+    Expression(Expr),
+}
+
+#[derive(Debug)]
 pub enum Expr {
     Integer(i32),
     Variable(String),
+
     Call {
         name: String,
         args: Vec<Expr>,
@@ -44,10 +59,4 @@ pub enum BinaryOp {
 pub enum UnaryOp {
     Neg,
     Not,
-}
-
-#[derive(Debug)]
-pub enum Statement {
-    Assignment { name: String, value: Expr },
-    Expression(Expr),
 }

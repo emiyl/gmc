@@ -21,6 +21,9 @@ pub enum Opcode {
     Pop = 0x45,
     PushI = 0x84,
     PopZ = 0x9E,
+    Branch = 0xB6,
+    BranchTrue = 0xB7,
+    BranchFalse = 0xB8,
     Push = 0xC0,
     Call = 0xD9,
 }
