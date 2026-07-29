@@ -25,6 +25,9 @@ pub enum Token {
     RightBrace,
     Comma,
 
+    Quotation,
+    Apostrophe,
+
     EOF,
 }
 
@@ -73,6 +76,8 @@ impl Lexer {
             ',' => Token::Comma,
             '{' => Token::LeftBrace,
             '}' => Token::RightBrace,
+            '"' => Token::Quotation,
+            '\'' => Token::Apostrophe,
 
             '0'..='9' => return self.read_number(),
             'a'..='z' | 'A'..='Z' | '_' => return self.read_identifier(),
