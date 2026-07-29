@@ -1,3 +1,5 @@
+use core::panic;
+
 use crate::ast::*;
 use crate::lexer::Token::Identifier;
 use crate::lexer::{Lexer, Token};
@@ -106,10 +108,22 @@ impl Parser {
         if let Token::Identifier(name) = &self.current {
             let name = name.clone();
 
-            return match name.as_str() {
-                "if" => self.parse_if_statement(),
-                _ => self.parse_assignment(name),
+            match self.peek(1) {
+                Token::Equals => return self.parse_assignment(name),
+                Token::LeftParen => {
+                    let expr = self.parse_expression();
+                    self.expect(Token::Semicolon);
+                    return Statement::Expression(expr);
+                }
+                _ => {}
+            }
+
+            match name.as_str() {
+                "if" => return self.parse_if_statement(),
+                _ => {}
             };
+
+            panic!("Unexpected identifier: {}", name);
         }
 
         // Otherwise, it's an expression statement.
