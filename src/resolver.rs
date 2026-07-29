@@ -1,11 +1,17 @@
 use std::collections::HashMap;
 
+use crate::Program;
 use crate::instruction::Instruction;
 
 #[derive(Debug, Clone)]
 pub struct Variable {
     pub name: String,
     pub var_ref: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct Function {
+    pub name: String,
 }
 
 pub struct Resolver {
@@ -38,7 +44,7 @@ impl Resolver {
         variable
     }
 
-    pub fn resolve(&mut self, instructions: Vec<Instruction>) -> (Vec<Instruction>, Vec<Variable>) {
+    pub fn resolve(&mut self, instructions: Vec<Instruction>) -> Program {
         let instructions = instructions
             .into_iter()
             .map(|instruction| match instruction {
@@ -66,6 +72,16 @@ impl Resolver {
             })
             .collect::<Vec<Instruction>>();
         let variables = self.variables.values().cloned().collect::<Vec<Variable>>();
-        (instructions, variables)
+        let functions = instructions
+            .iter()
+            .filter_map(|instruction| match instruction {
+                Instruction::Call { function, .. } => Some(Function {
+                    name: function.name.clone(),
+                }),
+                _ => None,
+            })
+            .collect::<Vec<Function>>();
+
+        Program::new(instructions, variables, functions)
     }
 }

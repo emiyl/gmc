@@ -32,6 +32,27 @@ struct Args {
     output: Option<String>,
 }
 
+pub struct Program {
+    pub bytecode: bytecode::Bytecode,
+    pub variables: Vec<resolver::Variable>,
+    pub functions: Vec<resolver::Function>,
+}
+
+impl Program {
+    pub fn new(
+        instructions: Vec<instruction::Instruction>,
+        variables: Vec<resolver::Variable>,
+        functions: Vec<resolver::Function>,
+    ) -> Self {
+        let bytecode = encoder::encode(instructions);
+        Self {
+            bytecode,
+            variables,
+            functions,
+        }
+    }
+}
+
 fn main() {
     let args: Args = ClapParser::parse();
     Builder::new()
@@ -51,19 +72,21 @@ fn main() {
     compiler.compile_program(&program);
 
     let mut resolver = Resolver::new();
-    let (resolved, variables) = resolver.resolve(compiler.instructions);
+    let program = resolver.resolve(compiler.instructions);
 
-    let bytecode = encoder::encode(resolved);
-    print_disassembly(&bytecode);
+    print_disassembly(&program.bytecode);
 
     if args.output.is_none() {
         println!("No output file specified. Use -o <file> to specify an output file.");
     } else {
-        let variable_names = variables
+        let variable_names = program
+            .variables
             .iter()
             .map(|v| v.name.clone())
             .collect::<Vec<String>>();
-        let output_data = data_win::build_data_win(&args.input, &bytecode.data, &variable_names);
+
+        let output_data =
+            data_win::build_data_win(&args.input, &program.bytecode.data, &variable_names);
         let output_file = args.output.as_ref().unwrap();
         std::fs::write(output_file, output_data).expect("Failed to write output file");
     }
