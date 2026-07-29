@@ -1,7 +1,7 @@
 use crate::ast::BinaryOp;
 use crate::bytecode::*;
 use crate::instruction::*;
-use crate::vari;
+use crate::resolver::Variable;
 
 #[derive(Debug)]
 pub struct Word {
@@ -9,6 +9,18 @@ pub struct Word {
     pub instr_type1: u8,
     pub instr_type2: u8,
     pub instr_instance_type: u16,
+}
+
+fn encode_variable(variable: &Variable) -> u16 {
+    let name = &variable.name;
+    let reference = if name.starts_with("global.") {
+        0xFFFB
+    } else if name.starts_with("self.") {
+        0xFFFF
+    } else {
+        0xFFFA
+    };
+    reference
 }
 
 impl Word {
@@ -65,7 +77,7 @@ pub fn encode(instructions: Vec<Instruction>) -> Bytecode {
                 let opcode = Opcode::Push as u16;
                 let type1 = ValueType::Var as u8;
                 let type2 = ValueType::Double as u8;
-                let vari = vari::encode_variable(&var);
+                let vari = encode_variable(&var);
                 let word = Word::new(opcode as u8, type1, type2, vari).to_u32();
                 output.write_u32(word);
                 output.write_u32(var.var_ref);
@@ -140,7 +152,7 @@ pub fn encode(instructions: Vec<Instruction>) -> Bytecode {
                 let opcode = Opcode::Pop as u16;
                 let type1 = dst_type as u8;
                 let type2 = src_type as u8;
-                let vari = vari::encode_variable(&variable);
+                let vari = encode_variable(&variable);
                 let word = Word::new(opcode as u8, type1, type2, vari).to_u32();
                 output.write_u32(word);
                 output.write_u32(variable.var_ref);

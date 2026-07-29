@@ -7,7 +7,6 @@ mod instruction;
 mod lexer;
 mod parser;
 mod resolver;
-mod vari;
 
 use clap::Parser as ClapParser;
 use compiler::Compiler;
