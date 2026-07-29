@@ -1,6 +1,7 @@
 mod ast;
 mod bytecode;
 mod compiler;
+mod data_win;
 mod disassembler;
 mod encoder;
 mod instruction;
@@ -50,7 +51,7 @@ fn main() {
     compiler.compile_program(&program);
 
     let mut resolver = Resolver::new();
-    let resolved = resolver.resolve(compiler.instructions);
+    let (resolved, variables) = resolver.resolve(compiler.instructions);
 
     let bytecode = encoder::encode(resolved);
     print_disassembly(&bytecode);
@@ -58,7 +59,12 @@ fn main() {
     if args.output.is_none() {
         println!("No output file specified. Use -o <file> to specify an output file.");
     } else {
-        let output_file = args.output.unwrap_or_else(|| "output.gmlc".to_string());
-        std::fs::write(output_file, bytecode.data).expect("Failed to write output file");
+        let variable_names = variables
+            .iter()
+            .map(|v| v.name.clone())
+            .collect::<Vec<String>>();
+        let output_data = data_win::build_data_win(&args.input, &bytecode.data, &variable_names);
+        let output_file = args.output.as_ref().unwrap();
+        std::fs::write(output_file, output_data).expect("Failed to write output file");
     }
 }

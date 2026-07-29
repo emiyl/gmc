@@ -17,7 +17,7 @@ impl Resolver {
     pub fn new() -> Self {
         Self {
             variables: HashMap::new(),
-            next_index: 3, // Seems to start at 3?
+            next_index: 0,
         }
     }
 
@@ -38,8 +38,8 @@ impl Resolver {
         variable
     }
 
-    pub fn resolve(&mut self, instructions: Vec<Instruction>) -> Vec<Instruction> {
-        instructions
+    pub fn resolve(&mut self, instructions: Vec<Instruction>) -> (Vec<Instruction>, Vec<Variable>) {
+        let instructions = instructions
             .into_iter()
             .map(|instruction| match instruction {
                 Instruction::Push(var) => {
@@ -64,6 +64,8 @@ impl Resolver {
 
                 other => other,
             })
-            .collect()
+            .collect::<Vec<Instruction>>();
+        let variables = self.variables.values().cloned().collect::<Vec<Variable>>();
+        (instructions, variables)
     }
 }
