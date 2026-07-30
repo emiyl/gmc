@@ -28,6 +28,8 @@
 use std::io;
 use std::path::Path;
 
+use crate::Program;
+
 // ---- wire-format wad version we are emitting (see module docs) ----
 const WAD_VERSION: u8 = 13;
 
@@ -55,13 +57,22 @@ pub struct CodeEntry {
 ///
 /// Returns the raw file bytes - write them wherever you like, or use
 /// [`write_data_win`] as a shortcut.
-pub fn build_data_win(code_name: &str, bytecode: &[u8], variables: &[String]) -> Vec<u8> {
+pub fn build_data_win(code_name: &str, program: Program) -> Vec<u8> {
     build_data_win_multi(
         &[CodeEntry {
             name: code_name.to_string(),
-            bytecode: bytecode.to_vec(),
+            bytecode: program.bytecode.data.clone(),
         }],
-        variables,
+        &program
+            .variables
+            .iter()
+            .map(|v| v.name.clone())
+            .collect::<Vec<String>>(),
+        &program
+            .functions
+            .iter()
+            .map(|f| f.name.clone())
+            .collect::<Vec<String>>(),
     )
 }
 
@@ -69,7 +80,11 @@ pub fn build_data_win(code_name: &str, bytecode: &[u8], variables: &[String]) ->
 /// first entry (`code[0]`) is the one wired up as the room's creation
 /// code; the rest just ride along in the CODE chunk for a runner that
 /// looks scripts up by name/index itself.
-pub fn build_data_win_multi(code: &[CodeEntry], variables: &[String]) -> Vec<u8> {
+pub fn build_data_win_multi(
+    code: &[CodeEntry],
+    variables: &[String],
+    functions: &[String],
+) -> Vec<u8> {
     let mut pool = StringPool::new();
 
     let creation_code_id: i32 = if code.is_empty() { -1 } else { 0 };
@@ -94,7 +109,7 @@ pub fn build_data_win_multi(code: &[CodeEntry], variables: &[String]) -> Vec<u8>
         ChunkBuilder::empty_list("TPAG"),
         build_code(&mut pool, code),
         build_vari(&mut pool, variables),
-        ChunkBuilder::new("FUNC"), // wadVersion<=14 + 0 length == 0 functions
+        build_func(&mut pool, functions),
         ChunkBuilder::new("STRG"), // placeholder; rebuilt below once base offset is known
         ChunkBuilder::empty_list("TXTR"),
         ChunkBuilder::empty_list("AUDO"),
@@ -173,13 +188,8 @@ pub fn build_data_win_multi(code: &[CodeEntry], variables: &[String]) -> Vec<u8>
 }
 
 /// Convenience wrapper: build and write straight to disk.
-pub fn write_data_win(
-    path: impl AsRef<Path>,
-    code_name: &str,
-    bytecode: &[u8],
-    variables: &[String],
-) -> io::Result<()> {
-    let bytes = build_data_win(code_name, bytecode, variables);
+pub fn write_data_win(path: impl AsRef<Path>, code_name: &str, program: Program) -> io::Result<()> {
+    let bytes = build_data_win(code_name, program);
     std::fs::write(path, bytes)
 }
 
@@ -463,6 +473,16 @@ fn build_vari(pool: &mut StringPool, variables: &[String]) -> ChunkBuilder {
     c
 }
 
+fn build_func(pool: &mut StringPool, functions: &[String]) -> ChunkBuilder {
+    let mut c = ChunkBuilder::new("FUNC");
+    for name in functions {
+        c.str_ref(pool, name);
+        c.u32(0); // occurrences
+        c.i32(-1); // firstAddress sentinel (no patch chain)
+    }
+    c
+}
+
 // ---------------------------------------------------------------------
 // Extending this further
 // ---------------------------------------------------------------------
@@ -479,6 +499,8 @@ fn build_vari(pool: &mut StringPool, variables: &[String]) -> ChunkBuilder {
 
 #[cfg(test)]
 mod tests {
+    use crate::{bytecode::Bytecode, resolver::Variable};
+
     use super::*;
 
     fn read_u32(data: &[u8], off: usize) -> u32 {
@@ -509,7 +531,22 @@ mod tests {
         let bytecode = vec![0xDEu8, 0xAD, 0xBE, 0xEF, 0x01, 0x02];
         let variables = vec!["x".to_string(), "y".to_string(), "hp".to_string()];
 
-        let out = build_data_win("gml_RoomCC_room0", &bytecode, &variables);
+        let out = build_data_win(
+            "gml_RoomCC_room0",
+            Program {
+                bytecode: Bytecode {
+                    data: bytecode.clone(),
+                },
+                variables: variables
+                    .iter()
+                    .map(|name| Variable {
+                        name: name.clone(),
+                        var_ref: 0,
+                    })
+                    .collect(),
+                functions: Vec::new(),
+            },
+        );
 
         // FORM header is self-consistent.
         assert_eq!(&out[0..4], b"FORM");
@@ -550,7 +587,11 @@ mod tests {
 
     #[test]
     fn empty_code_disables_room_creation_code() {
-        let out = build_data_win_multi(&[], &[]);
+        let out = build_data_win_multi(
+            &[],
+            &["x".to_string(), "y".to_string()],
+            &["foo".to_string()],
+        );
         let (room_start, _) = find_chunk(&out, b"ROOM");
         let room0_ptr = read_u32(&out, room_start + 4) as usize;
         let creation_code_id =

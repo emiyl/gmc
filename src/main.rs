@@ -81,14 +81,7 @@ fn main() {
     if args.output.is_none() {
         println!("No output file specified. Use -o <file> to specify an output file.");
     } else {
-        let variable_names = program
-            .variables
-            .iter()
-            .map(|v| v.name.clone())
-            .collect::<Vec<String>>();
-
-        let output_data =
-            data_win::build_data_win(&args.input, &program.bytecode.data, &variable_names);
+        let output_data = data_win::build_data_win(&args.input, program);
         let output_file = args.output.as_ref().unwrap();
         std::fs::write(output_file, output_data).expect("Failed to write output file");
     }
