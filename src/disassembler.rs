@@ -144,6 +144,16 @@ pub fn print_disassembly(bytecode: &Bytecode) {
                         )
                     }
 
+                    Opcode::Call => {
+                        let function_ref = extra_data[0];
+                        let args_len = instr_instance_type;
+                        format!(
+                            "{opcode:?} (function_ref: 0x{function_ref:08X}, args_len: {args_len})",
+                            function_ref = function_ref,
+                            args_len = args_len
+                        )
+                    }
+
                     _ => format!("{opcode:?} (type1: 0x{instr_type1:X}, type2: 0x{instr_type2:X})"),
                 }
             );

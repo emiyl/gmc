@@ -66,5 +66,6 @@ pub enum Instruction {
 
     Call {
         function: Function,
+        args_len: usize,
     },
 }

@@ -18,7 +18,8 @@ pub struct Function {
 pub struct Resolver {
     variables: HashMap<String, Variable>,
     functions: HashMap<String, Function>,
-    next_index: u32,
+    var_next_index: u32,
+    func_next_index: u32,
 }
 
 impl Resolver {
@@ -26,7 +27,8 @@ impl Resolver {
         Self {
             variables: HashMap::new(),
             functions: HashMap::new(),
-            next_index: 0,
+            var_next_index: 0,
+            func_next_index: 0,
         }
     }
 
@@ -37,10 +39,10 @@ impl Resolver {
 
         let variable = Variable {
             name: name.to_string(),
-            var_ref: 0xA0000000 | self.next_index,
+            var_ref: 0xA0000000 | self.var_next_index,
         };
 
-        self.next_index += 1;
+        self.var_next_index += 1;
 
         self.variables.insert(name.to_string(), variable.clone());
 
@@ -54,10 +56,10 @@ impl Resolver {
 
         let function = Function {
             name: name.to_string(),
-            var_ref: self.next_index,
+            var_ref: self.func_next_index,
         };
 
-        self.next_index += 1;
+        self.func_next_index += 1;
 
         self.functions.insert(name.to_string(), function.clone());
 
@@ -88,10 +90,10 @@ impl Resolver {
                     }
                 }
 
-                Instruction::Call { function } => {
+                Instruction::Call { function, args_len } => {
                     let function = self.get_function(&function.name);
 
-                    Instruction::Call { function }
+                    Instruction::Call { function, args_len }
                 }
 
                 other => other,

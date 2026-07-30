@@ -210,7 +210,10 @@ impl Compiler {
                     var_ref: 0,
                 };
 
-                self.instructions.push(Instruction::Call { function: func });
+                self.instructions.push(Instruction::Call {
+                    function: func,
+                    args_len: args.len(),
+                });
             }
         }
     }
