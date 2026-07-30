@@ -168,7 +168,7 @@ pub fn encode(instructions: Vec<Instruction>) -> Bytecode {
 
             Instruction::Call { function } => {
                 let opcode = Opcode::Call as u16;
-                let type1 = ValueType::Var as u8;
+                let type1 = ValueType::Int32 as u8;
                 let type2 = ValueType::Double as u8;
                 let word = Word::new(opcode as u8, type1, type2, 0).to_u32();
                 output.write_u32(word);

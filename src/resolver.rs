@@ -12,10 +12,12 @@ pub struct Variable {
 #[derive(Debug, Clone)]
 pub struct Function {
     pub name: String,
+    pub var_ref: u32,
 }
 
 pub struct Resolver {
     variables: HashMap<String, Variable>,
+    functions: HashMap<String, Function>,
     next_index: u32,
 }
 
@@ -23,6 +25,7 @@ impl Resolver {
     pub fn new() -> Self {
         Self {
             variables: HashMap::new(),
+            functions: HashMap::new(),
             next_index: 0,
         }
     }
@@ -42,6 +45,23 @@ impl Resolver {
         self.variables.insert(name.to_string(), variable.clone());
 
         variable
+    }
+
+    fn get_function(&mut self, name: &str) -> Function {
+        if let Some(function) = self.functions.get(name) {
+            return function.clone();
+        }
+
+        let function = Function {
+            name: name.to_string(),
+            var_ref: self.next_index,
+        };
+
+        self.next_index += 1;
+
+        self.functions.insert(name.to_string(), function.clone());
+
+        function
     }
 
     pub fn resolve(&mut self, instructions: Vec<Instruction>) -> Program {
@@ -68,6 +88,12 @@ impl Resolver {
                     }
                 }
 
+                Instruction::Call { function } => {
+                    let function = self.get_function(&function.name);
+
+                    Instruction::Call { function }
+                }
+
                 other => other,
             })
             .collect::<Vec<Instruction>>();
@@ -77,6 +103,7 @@ impl Resolver {
             .filter_map(|instruction| match instruction {
                 Instruction::Call { function, .. } => Some(Function {
                     name: function.name.clone(),
+                    var_ref: function.var_ref,
                 }),
                 _ => None,
             })

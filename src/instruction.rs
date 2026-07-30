@@ -1,6 +1,6 @@
 use crate::ast::BinaryOp;
 use crate::bytecode::Opcode;
-use crate::resolver::Variable;
+use crate::resolver::{Function, Variable};
 use num_enum::TryFromPrimitive;
 
 #[derive(Debug, Clone, Copy, TryFromPrimitive, PartialEq)]
@@ -65,6 +65,6 @@ pub enum Instruction {
     },
 
     Call {
-        function: Variable,
+        function: Function,
     },
 }

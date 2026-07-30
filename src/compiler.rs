@@ -1,7 +1,7 @@
 use crate::ast::*;
 use crate::bytecode::Opcode;
 use crate::instruction::*;
-use crate::resolver::Variable;
+use crate::resolver::{Function, Variable};
 
 fn value_type_from_expr(expr: &Expr) -> ValueType {
     match expr {
@@ -205,12 +205,12 @@ impl Compiler {
                     self.compile_expression(arg);
                 }
 
-                let var = Variable {
+                let func = Function {
                     name: name.clone(),
                     var_ref: 0,
                 };
 
-                self.instructions.push(Instruction::Call { function: var });
+                self.instructions.push(Instruction::Call { function: func });
             }
         }
     }
