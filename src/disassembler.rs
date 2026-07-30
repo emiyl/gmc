@@ -71,8 +71,8 @@ pub fn print_disassembly(bytecode: &Bytecode) {
                     }
 
                     Opcode::Conv => {
-                        let from_type = ValueType::try_from(instr_type1 as u8).unwrap();
-                        let to_type = ValueType::try_from(instr_type2 as u8).unwrap();
+                        let from_type = ValueType::try_from(instr_type2 as u8).unwrap();
+                        let to_type = ValueType::try_from(instr_type1 as u8).unwrap();
                         format!(
                             "{opcode:?}.{from_char}.{to_char} (pops: [{from_str}] -> pushes: [{to_str}])",
                             from_char = get_type_print(from_type).0,
@@ -148,7 +148,9 @@ pub fn print_disassembly(bytecode: &Bytecode) {
                         let function_ref = extra_data[0];
                         let args_len = instr_instance_type;
                         format!(
-                            "{opcode:?} (function_ref: 0x{function_ref:08X}, args_len: {args_len})",
+                            "{opcode:?}.{type2_char} (function_ref: 0x{function_ref:08X}, args_len: {args_len})",
+                            type2_char =
+                                get_type_print(ValueType::try_from(instr_type2 as u8).unwrap()).0,
                             function_ref = function_ref,
                             args_len = args_len
                         )

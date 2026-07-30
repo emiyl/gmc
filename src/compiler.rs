@@ -203,6 +203,7 @@ impl Compiler {
             Expr::Call { name, args } => {
                 for arg in args {
                     self.compile_expression(arg);
+                    self.emit_conv_if_needed(value_type_from_expr(arg), ValueType::Var);
                 }
 
                 let func = Function {
