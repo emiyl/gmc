@@ -1,22 +1,16 @@
-//! Minimal data.win (GameMaker "FORM" IFF container) writer, built to be
-//! dropped into `gmlc` as a plain module (`mod datawin;`).
+//! Minimal data.win (GameMaker "FORM" IFF container) writer.
 //!
+//! # Design
+//! Each GameMaker chunk is represented as a plain Rust struct whose fields
+//! map directly to the on-disk layout.  Assemble them into a [`DataWin`] and
+//! call [`DataWin::build`] to obtain the complete raw file bytes.
+//!
+//! For the common single-script case, [`build_data_win`] / [`write_data_win`]
+//! provide a one-call shorthand.
+//!
+//! # Targets
 //! This targets the "wadVersion 13" layout (roughly GameMaker: Studio 1.4),
-//! which is the simplest fully-specified branch in the reference parser at
-//! https://github.com/ButterscotchRunner/Butterscotch/blob/main/src/data_win.c
-//! and — not coincidentally — the branch where CODE/VARI/FUNC use the flat,
-//! header-free encoding, which keeps this writer small.
-//!
-//! # Entry point
-//! Call [`build_data_win`] with your compiled bytecode and the variable
-//! names it references; you get back the complete file bytes to write
-//! wherever you like. [`CodeEntry`] exists so you can later hand this
-//! multiple scripts instead of one - see the "Extending" notes at the
-//! bottom of this file.
-//!
-//! The compiled bytecode is wired up as the ROOM's `creationCodeId`, so a
-//! runner that implements standard GameMaker room-load semantics will
-//! execute it automatically when the (single, otherwise-empty) room loads.
+//! where CODE / VARI / FUNC use the flat, header-free encoding.
 //!
 //! # Offset conventions (the easiest thing to get backwards)
 //!   1. Every OTHER chunk's "string pointer" field stores the ABSOLUTE FILE
@@ -30,113 +24,496 @@ use std::path::Path;
 
 use crate::Program;
 
-// ---- wire-format wad version we are emitting (see module docs) ----
 const WAD_VERSION: u8 = 13;
 
-/// A single compiled script, ready to be embedded in the CODE chunk.
+// ================================================================
+// Public chunk structs
+// ================================================================
+
+/// GEN8 chunk – game metadata header.
+pub struct Gen8 {
+    pub is_debugger_disabled: bool,
+    pub file_name: String,
+    pub config: String,
+    pub last_obj: u32,
+    pub last_tile: u32,
+    pub game_id: u32,
+    pub direct_play_guid: [u8; 16],
+    pub name: String,
+    pub major: u32,
+    pub minor: u32,
+    pub release: u32,
+    pub build_number: u32,
+    pub default_window_width: u32,
+    pub default_window_height: u32,
+    /// GEN8 info bitflags.
+    pub info: u32,
+    pub license_crc32: u32,
+    pub license_md5: [u8; 16],
+    pub timestamp: u64,
+    pub display_name: String,
+    pub active_targets: u64,
+    pub function_classifications: u64,
+    pub steam_app_id: i32,
+    /// Room indices in load order; must correspond to rooms in the ROOM chunk
+    /// by index.
+    pub room_order: Vec<i32>,
+}
+
+impl Default for Gen8 {
+    fn default() -> Self {
+        Gen8 {
+            is_debugger_disabled: false,
+            file_name: "mygame".to_string(),
+            config: "Configs\\Default".to_string(),
+            last_obj: 0,
+            last_tile: 0,
+            game_id: 0x1234_5678,
+            direct_play_guid: [0; 16],
+            name: "MyGame".to_string(),
+            major: 1,
+            minor: 4,
+            release: 9999,
+            build_number: 0,
+            default_window_width: 640,
+            default_window_height: 480,
+            info: 0,
+            license_crc32: 0,
+            license_md5: [0; 16],
+            timestamp: 0,
+            display_name: "My Game".to_string(),
+            active_targets: 0,
+            function_classifications: 0,
+            steam_app_id: 0,
+            room_order: vec![0],
+        }
+    }
+}
+
+impl Gen8 {
+    fn serialize(&self, pool: &mut StringPool) -> ChunkBuilder {
+        let mut c = ChunkBuilder::new("GEN8");
+
+        c.u8(self.is_debugger_disabled as u8);
+        c.u8(WAD_VERSION);
+        c.zero_bytes(2); // padding
+
+        c.str_ref(pool, &self.file_name);
+        c.str_ref(pool, &self.config);
+        c.u32(self.last_obj);
+        c.u32(self.last_tile);
+        c.u32(self.game_id);
+        c.bytes(&self.direct_play_guid);
+
+        c.str_ref(pool, &self.name);
+        c.u32(self.major);
+        c.u32(self.minor);
+        c.u32(self.release);
+        c.u32(self.build_number);
+        c.u32(self.default_window_width);
+        c.u32(self.default_window_height);
+        c.u32(self.info);
+        c.u32(self.license_crc32);
+        c.bytes(&self.license_md5);
+
+        // wadVersion > 12 -> full tail
+        c.u64(self.timestamp);
+        c.str_ref(pool, &self.display_name);
+        c.u64(self.active_targets);
+        c.u64(self.function_classifications);
+        c.i32(self.steam_app_id);
+        // wadVersion < 14 -> no debuggerPort field
+
+        c.u32(self.room_order.len() as u32);
+        for &idx in &self.room_order {
+            c.i32(idx);
+        }
+        // major == 1 -> no GMS2 random-seed / FPS / GUID tail
+
+        c
+    }
+}
+
+/// OPTN chunk - engine / display options.
 ///
-/// `name` is just a label (GameMaker convention is `gml_Script_<name>` /
-/// `gml_Object_<obj>_<event>` / `gml_RoomCC_<room>`, but a runner that
-/// doesn't do name-based lookups can use anything unique).
+/// Always emitted with the "new" bitflag layout
+/// (`shaderExtensionFlag = 0x8000_0000`, `shaderExtVersion = 1`).
+pub struct Optn {
+    /// Info bitflags; e.g. `0x10` = ShowCursor.
+    pub info: u64,
+    pub scale: i32,
+    pub window_color: u32,
+    pub color_depth: u32,
+    pub resolution: u32,
+    pub frequency: u32,
+    pub vertex_sync: u32,
+    pub priority: u32,
+    pub back_image: u32,
+    pub front_image: u32,
+    pub load_image: u32,
+    pub load_alpha: u32,
+}
+
+impl Default for Optn {
+    fn default() -> Self {
+        Optn {
+            info: 0x10,
+            scale: 0,
+            window_color: 0,
+            color_depth: 32,
+            resolution: 0,
+            frequency: 60,
+            vertex_sync: 1,
+            priority: 0,
+            back_image: 0,
+            front_image: 0,
+            load_image: 0,
+            load_alpha: 255,
+        }
+    }
+}
+
+impl Optn {
+    fn serialize(&self) -> ChunkBuilder {
+        let mut c = ChunkBuilder::new("OPTN");
+
+        c.u32(0x8000_0000); // shaderExtensionFlag - selects new bitflag layout
+        c.i32(1); // shaderExtVersion
+
+        c.u64(self.info);
+        c.i32(self.scale);
+        c.u32(self.window_color);
+        c.u32(self.color_depth);
+        c.u32(self.resolution);
+        c.u32(self.frequency);
+        c.u32(self.vertex_sync);
+        c.u32(self.priority);
+        c.u32(self.back_image);
+        c.u32(self.front_image);
+        c.u32(self.load_image);
+        c.u32(self.load_alpha);
+
+        c.u32(0); // constantCount (wadVersion > 8 -> Constants list present, but empty)
+
+        c
+    }
+}
+
+/// A single room entry for the ROOM chunk.
+pub struct Room {
+    pub name: String,
+    pub caption: String,
+    pub width: u32,
+    pub height: u32,
+    pub speed: u32,
+    pub persistent: bool,
+    pub background_color: u32,
+    pub draw_background_color: bool,
+    /// Index into the CODE chunk whose bytecode runs when this room loads,
+    /// or `-1` for none.
+    pub creation_code_id: i32,
+    pub flags: u32,
+    pub world: bool,
+    pub top: u32,
+    pub left: u32,
+    pub right: u32,
+    pub bottom: u32,
+    pub gravity_x: f32,
+    pub gravity_y: f32,
+    pub meters_per_pixel: f32,
+}
+
+impl Default for Room {
+    fn default() -> Self {
+        Room {
+            name: "room0".to_string(),
+            caption: String::new(),
+            width: 640,
+            height: 480,
+            speed: 30,
+            persistent: false,
+            background_color: 0x00FF_FFFF,
+            draw_background_color: true,
+            creation_code_id: -1,
+            flags: 0,
+            world: false,
+            top: 0,
+            left: 0,
+            right: 640,
+            bottom: 480,
+            gravity_x: 0.0,
+            gravity_y: 10.0,
+            meters_per_pixel: 0.1,
+        }
+    }
+}
+
+/// A single compiled script entry for the CODE chunk.
 ///
-/// `bytecode` is the raw compiled instruction stream from `gmlc`, embedded
-/// byte-for-byte with no framing beyond the length prefix GameMaker itself
-/// expects.
+/// `name` follows the GameMaker convention (`gml_Script_<name>`,
+/// `gml_Object_<obj>_<event>`, `gml_RoomCC_<room>`, ...), though any unique
+/// label works for runners that do not do name-based lookups.
+#[derive(Clone)]
 pub struct CodeEntry {
     pub name: String,
     pub bytecode: Vec<u8>,
 }
 
-/// Build a complete data.win file containing one compiled script (wired up
-/// as the room's creation code) and the variable names it references.
+/// Top-level container for all chunk data.
 ///
-/// `code_name` becomes the CODE entry's name. `bytecode` is gmlc's
-/// compiled output for that script. `variables` is the list of variable
-/// names gmlc collected while compiling it (order doesn't matter to this
-/// writer; each becomes one VARI entry).
+/// Populate the fields and call [`DataWin::build`] to get the raw bytes.
 ///
-/// Returns the raw file bytes - write them wherever you like, or use
-/// [`write_data_win`] as a shortcut.
-pub fn build_data_win(code_name: &str, program: Program) -> Vec<u8> {
-    build_data_win_multi(
-        &[CodeEntry {
-            name: code_name.to_string(),
-            bytecode: program.bytecode.data.clone(),
-        }],
-        &program
-            .variables
-            .iter()
-            .map(|v| v.name.clone())
-            .collect::<Vec<String>>(),
-        &program
-            .functions
-            .iter()
-            .map(|f| f.name.clone())
-            .collect::<Vec<String>>(),
-    )
+/// rust,ignore
+/// let dw = DataWin {
+///     gen8: Gen8 { display_name: "My Cool Game".to_string(), ..Gen8::default() },
+///     rooms: vec![Room { creation_code_id: 0, ..Room::default() }],
+///     code: vec![CodeEntry { name: "gml_RoomCC_room0".to_string(), bytecode }],
+///     ..DataWin::default()
+/// };
+/// std::fs::write("data.win", dw.build())?;
+pub struct DataWin {
+    pub gen8: Gen8,
+    pub optn: Optn,
+    /// Rooms listed in ROOM-chunk order; `gen8.room_order` references these
+    /// by index.
+    pub rooms: Vec<Room>,
+    /// Compiled scripts for the CODE chunk.
+    pub code: Vec<CodeEntry>,
+    /// Variable names referenced by code; written to the VARI chunk.
+    pub variables: Vec<String>,
+    /// Function names referenced by code; written to the FUNC chunk.
+    pub functions: Vec<String>,
 }
 
-/// Same as [`build_data_win`], but for more than one compiled script. The
-/// first entry (`code[0]`) is the one wired up as the room's creation
-/// code; the rest just ride along in the CODE chunk for a runner that
-/// looks scripts up by name/index itself.
+impl Default for DataWin {
+    fn default() -> Self {
+        DataWin {
+            gen8: Gen8::default(),
+            optn: Optn::default(),
+            rooms: vec![Room::default()],
+            code: Vec::new(),
+            variables: Vec::new(),
+            functions: Vec::new(),
+        }
+    }
+}
+
+impl DataWin {
+    /// Serialise all chunks into a complete `data.win` byte stream.
+    pub fn build(&self) -> Vec<u8> {
+        let mut pool = StringPool::new();
+
+        // Chunk order matches the conventional GameMaker data.win layout.
+        let mut chunks: Vec<ChunkBuilder> = vec![
+            self.gen8.serialize(&mut pool),
+            self.optn.serialize(),
+            ChunkBuilder::empty_list("EXTN"),
+            ChunkBuilder::empty_list("SOND"),
+            ChunkBuilder::empty_list("AGRP"),
+            ChunkBuilder::empty_list("SPRT"),
+            ChunkBuilder::empty_list("BGND"),
+            ChunkBuilder::empty_list("PATH"),
+            ChunkBuilder::empty_list("SCPT"),
+            ChunkBuilder::empty_list("GLOB"),
+            ChunkBuilder::empty_list("SHDR"),
+            ChunkBuilder::empty_list("FONT"),
+            ChunkBuilder::empty_list("TMLN"),
+            ChunkBuilder::empty_list("OBJT"),
+            serialize_rooms(&self.rooms, &mut pool),
+            ChunkBuilder::empty_list("TPAG"),
+            serialize_code(&self.code, &mut pool),
+            serialize_vari(&self.variables, &mut pool),
+            serialize_func(&self.functions, &mut pool),
+            ChunkBuilder::new("STRG"), // placeholder; rebuilt once its base offset is known
+            ChunkBuilder::empty_list("TXTR"),
+            ChunkBuilder::empty_list("AUDO"),
+        ];
+
+        layout_and_patch(&mut chunks, &pool)
+    }
+}
+
+// ================================================================
+// Convenience entry points
+// ================================================================
+
+/// Build a complete `data.win` from a single compiled script and its
+/// variable/function references. The script is wired up as `room0`'s
+/// creation code so a standard runner executes it on room load.
+pub fn build_data_win(code_name: &str, program: Program) -> Vec<u8> {
+    DataWin {
+        rooms: vec![Room {
+            creation_code_id: 0,
+            ..Room::default()
+        }],
+        code: vec![CodeEntry {
+            name: code_name.to_string(),
+            bytecode: program.bytecode.data,
+        }],
+        variables: program.variables.into_iter().map(|v| v.name).collect(),
+        functions: program.functions.into_iter().map(|f| f.name).collect(),
+        ..DataWin::default()
+    }
+    .build()
+}
+
+/// Like [`build_data_win`], but accepts multiple compiled scripts.
+/// Only `code[0]` is wired to `room0`'s creation code; the rest ride along
+/// in the CODE chunk for runners that look scripts up by name or index.
 pub fn build_data_win_multi(
     code: &[CodeEntry],
     variables: &[String],
     functions: &[String],
 ) -> Vec<u8> {
-    let mut pool = StringPool::new();
+    DataWin {
+        rooms: vec![Room {
+            creation_code_id: if code.is_empty() { -1 } else { 0 },
+            ..Room::default()
+        }],
+        code: code.to_vec(),
+        variables: variables.to_vec(),
+        functions: functions.to_vec(),
+        ..DataWin::default()
+    }
+    .build()
+}
 
-    let creation_code_id: i32 = if code.is_empty() { -1 } else { 0 };
+/// Convenience wrapper: build and write straight to disk.
+pub fn write_data_win(path: impl AsRef<Path>, code_name: &str, program: Program) -> io::Result<()> {
+    std::fs::write(path, build_data_win(code_name, program))
+}
 
-    // Chunk order matches the conventional GameMaker data.win layout.
-    let mut chunks: Vec<ChunkBuilder> = vec![
-        build_gen8(&mut pool),
-        build_optn(),
-        ChunkBuilder::empty_list("EXTN"),
-        ChunkBuilder::empty_list("SOND"),
-        ChunkBuilder::empty_list("AGRP"),
-        ChunkBuilder::empty_list("SPRT"),
-        ChunkBuilder::empty_list("BGND"),
-        ChunkBuilder::empty_list("PATH"),
-        ChunkBuilder::empty_list("SCPT"),
-        ChunkBuilder::empty_list("GLOB"),
-        ChunkBuilder::empty_list("SHDR"),
-        ChunkBuilder::empty_list("FONT"),
-        ChunkBuilder::empty_list("TMLN"),
-        ChunkBuilder::empty_list("OBJT"),
-        build_room(&mut pool, creation_code_id),
-        ChunkBuilder::empty_list("TPAG"),
-        build_code(&mut pool, code),
-        build_vari(&mut pool, variables),
-        build_func(&mut pool, functions),
-        ChunkBuilder::new("STRG"), // placeholder; rebuilt below once base offset is known
-        ChunkBuilder::empty_list("TXTR"),
-        ChunkBuilder::empty_list("AUDO"),
-    ];
+// ================================================================
+// Private chunk serializers
+// ================================================================
+
+fn serialize_rooms(rooms: &[Room], pool: &mut StringPool) -> ChunkBuilder {
+    let mut c = ChunkBuilder::new("ROOM");
+
+    c.u32(rooms.len() as u32);
+    let ptr_positions: Vec<usize> = (0..rooms.len())
+        .map(|_| c.local_ref_placeholder())
+        .collect();
+
+    for (room, ptr_pos) in rooms.iter().zip(ptr_positions) {
+        let room_start = c.pos();
+        c.local_ref_set(ptr_pos, room_start);
+
+        c.str_ref(pool, &room.name);
+        c.str_ref(pool, &room.caption);
+        c.u32(room.width);
+        c.u32(room.height);
+        c.u32(room.speed);
+        c.bool32(room.persistent);
+        c.u32(room.background_color);
+        c.bool32(room.draw_background_color);
+        c.i32(room.creation_code_id);
+        c.u32(room.flags);
+
+        let bg_off = c.local_ref_placeholder();
+        let view_off = c.local_ref_placeholder();
+        let obj_off = c.local_ref_placeholder();
+        let tile_off = c.local_ref_placeholder();
+
+        c.bool32(room.world);
+        c.u32(room.top);
+        c.u32(room.left);
+        c.u32(room.right);
+        c.u32(room.bottom);
+        c.f32(room.gravity_x);
+        c.f32(room.gravity_y);
+        c.f32(room.meters_per_pixel);
+
+        let bg_list = c.pos();
+        c.u32(0); // 0 backgrounds
+        let view_list = c.pos();
+        c.u32(0); // 0 views
+        let obj_list = c.pos();
+        c.u32(0); // 0 objects
+        let tile_list = c.pos();
+        c.u32(0); // 0 tiles
+
+        c.local_ref_set(bg_off, bg_list);
+        c.local_ref_set(view_off, view_list);
+        c.local_ref_set(obj_off, obj_list);
+        c.local_ref_set(tile_off, tile_list);
+    }
+
+    c
+}
+
+/// CODE chunk: PointerList of compiled scripts (old / wadVersion <= 14 format).
+/// Each entry is `name, length, <raw bytes>` - no locals/arguments header.
+fn serialize_code(code: &[CodeEntry], pool: &mut StringPool) -> ChunkBuilder {
+    let mut c = ChunkBuilder::new("CODE");
+
+    c.u32(code.len() as u32);
+    let ptr_positions: Vec<usize> = (0..code.len()).map(|_| c.local_ref_placeholder()).collect();
+
+    for (entry, ptr_pos) in code.iter().zip(ptr_positions) {
+        let entry_start = c.pos();
+        c.local_ref_set(ptr_pos, entry_start);
+
+        c.str_ref(pool, &entry.name);
+        c.u32(entry.bytecode.len() as u32);
+        c.bytes(&entry.bytecode);
+    }
+
+    c
+}
+
+/// VARI chunk (wadVersion <= 14 "old format"): 12 bytes per variable, no
+/// header. `occurrences = 0` / `firstAddress = -1` signals that the runtime
+/// patch chain should not be walked (gmlc bakes variable IDs at compile time).
+fn serialize_vari(variables: &[String], pool: &mut StringPool) -> ChunkBuilder {
+    let mut c = ChunkBuilder::new("VARI");
+    for name in variables {
+        c.str_ref(pool, name);
+        c.u32(0); // occurrences
+        c.i32(-1); // firstAddress sentinel (no patch chain)
+    }
+    c
+}
+
+/// FUNC chunk: same layout as VARI.
+fn serialize_func(functions: &[String], pool: &mut StringPool) -> ChunkBuilder {
+    let mut c = ChunkBuilder::new("FUNC");
+    for name in functions {
+        c.str_ref(pool, name);
+        c.u32(0); // occurrences
+        c.i32(-1); // firstAddress sentinel (no patch chain)
+    }
+    c
+}
+
+// ================================================================
+// Layout and patch pass
+// ================================================================
+
+/// Compute the final file layout, build the real STRG chunk, back-fill all
+/// placeholder offsets, then concatenate everything into the finished bytes.
+fn layout_and_patch(chunks: &mut Vec<ChunkBuilder>, pool: &StringPool) -> Vec<u8> {
     let strg_idx = chunks.iter().position(|c| &c.name == b"STRG").unwrap();
 
-    // --- Stage 1: lay out every chunk before STRG (their sizes don't
-    // depend on where strings end up, only on the fixed 4-byte
-    // placeholders already written). ---
+    // Stage 1: lay out every chunk before STRG (sizes don't depend on where
+    // strings end up, only on the fixed 4-byte placeholders already written).
     let mut base_offsets = vec![0usize; chunks.len()];
-    let mut cursor = 8usize; // past "FORM" + u32 length
+    let mut cursor = 8usize; // past "FORM" + u32 total-length
     for i in 0..strg_idx {
         base_offsets[i] = cursor + 8; // skip this chunk's own 8-byte header
         cursor += 8 + chunks[i].data.len();
     }
     base_offsets[strg_idx] = cursor + 8;
 
-    // --- Stage 2: build the real STRG chunk now that we know its base
-    // file offset, computing each string's length-prefix offset (for
-    // STRG's own pointer table) and character offset (for every other
-    // chunk's string references). ---
+    // Stage 2: build the real STRG chunk now that its base offset is known,
+    // computing each string's length-prefix offset (for STRG's own pointer
+    // table) and character offset (for every other chunk's string references).
     let strg_base = base_offsets[strg_idx];
     let mut strg = ChunkBuilder::new("STRG");
     strg.u32(pool.strings.len() as u32);
     let ptr_table_pos = strg.pos();
     for _ in &pool.strings {
-        strg.u32(0); // placeholder pointer table entries, filled below
+        strg.u32(0); // placeholder pointer-table entries, filled below
     }
     let mut char_offsets = Vec::with_capacity(pool.strings.len());
     for (i, s) in pool.strings.iter().enumerate() {
@@ -151,7 +528,7 @@ pub fn build_data_win_multi(
     }
     chunks[strg_idx] = strg;
 
-    // --- Stage 3: lay out everything after STRG using its real size. ---
+    // Stage 3: lay out everything after STRG using its real size.
     cursor = strg_base + chunks[strg_idx].data.len();
     for i in (strg_idx + 1)..chunks.len() {
         base_offsets[i] = cursor + 8;
@@ -159,9 +536,7 @@ pub fn build_data_win_multi(
     }
     let total_file_size = cursor;
 
-    // --- Stage 4: back-fill every reserved placeholder across all
-    // chunks now that both string offsets and chunk base offsets are
-    // known. ---
+    // Stage 4: back-fill every placeholder across all chunks.
     for (i, c) in chunks.iter_mut().enumerate() {
         let patches = c.patches.clone();
         for p in patches {
@@ -174,11 +549,11 @@ pub fn build_data_win_multi(
         }
     }
 
-    // --- Stage 5: concatenate everything into the final file. ---
+    // Stage 5: concatenate into the final file.
     let mut out = Vec::with_capacity(total_file_size);
     out.extend_from_slice(b"FORM");
     out.extend_from_slice(&((total_file_size - 8) as u32).to_le_bytes());
-    for c in &chunks {
+    for c in chunks.iter() {
         out.extend_from_slice(&c.name);
         out.extend_from_slice(&(c.data.len() as u32).to_le_bytes());
         out.extend_from_slice(&c.data);
@@ -187,25 +562,18 @@ pub fn build_data_win_multi(
     out
 }
 
-/// Convenience wrapper: build and write straight to disk.
-pub fn write_data_win(path: impl AsRef<Path>, code_name: &str, program: Program) -> io::Result<()> {
-    let bytes = build_data_win(code_name, program);
-    std::fs::write(path, bytes)
-}
+// ================================================================
+// Low-level byte builder (private)
+// ================================================================
 
-// ---------------------------------------------------------------------
-// Internals
-// ---------------------------------------------------------------------
-
-/// One patch that must be back-filled once final file layout is known.
+/// One placeholder that must be back-filled once the final layout is known.
 #[derive(Clone, Copy)]
 enum Patch {
-    /// (byte offset within this chunk's data, string id) -> absolute
-    /// file offset of that string's *characters*.
+    /// `(byte offset in chunk data, string id)` -> absolute file offset of
+    /// the string's character bytes.
     Str(usize, usize),
-    /// (byte offset within this chunk's data, target offset relative to
-    /// the start of this SAME chunk's data) -> absolute file offset
-    /// (chunk_base + target).
+    /// `(byte offset in chunk data, target offset relative to this chunk's
+    /// data start)` -> absolute file offset (`chunk_base + target`).
     Local(usize, usize),
 }
 
@@ -228,8 +596,8 @@ impl ChunkBuilder {
         }
     }
 
-    /// A chunk consisting of nothing but a single zero "count" field -
-    /// the shape every list-bearing-but-empty chunk in this file takes.
+    /// A chunk with nothing but a single `0` count - the shape every
+    /// list-bearing-but-empty chunk takes.
     fn empty_list(name: &str) -> Self {
         let mut c = Self::new(name);
         c.u32(0);
@@ -269,8 +637,8 @@ impl ChunkBuilder {
         self.data[pos..pos + 4].copy_from_slice(&v.to_le_bytes());
     }
 
-    /// Reserve 4 bytes now; patched later to the absolute file offset of
-    /// `s`'s characters once the STRG chunk has been laid out.
+    /// Write 4 zero bytes and record a [`Patch::Str`] to be resolved once
+    /// the STRG chunk is finalised.
     fn str_ref(&mut self, pool: &mut StringPool, s: &str) {
         let id = pool.intern(s);
         let pos = self.pos();
@@ -278,13 +646,19 @@ impl ChunkBuilder {
         self.patches.push(Patch::Str(pos, id));
     }
 
-    /// Reserve 4 bytes now; returns the reserved position so the caller
-    /// can push a `Patch::Local` once the target offset is known (which
-    /// may be immediately, or after writing more of the chunk).
+    /// Write 4 zero bytes and return the reserved position so the caller
+    /// can later call [`Self::local_ref_set`] once the target offset is known.
     fn local_ref_placeholder(&mut self) -> usize {
         let pos = self.pos();
         self.u32(0);
         pos
+    }
+
+    /// Record a [`Patch::Local`] linking `placeholder_pos` (previously
+    /// returned by [`Self::local_ref_placeholder`]) to `target_rel` (an
+    /// offset relative to this chunk's data start).
+    fn local_ref_set(&mut self, placeholder_pos: usize, target_rel: usize) {
+        self.patches.push(Patch::Local(placeholder_pos, target_rel));
     }
 }
 
@@ -298,6 +672,7 @@ impl StringPool {
             strings: Vec::new(),
         }
     }
+
     fn intern(&mut self, s: &str) -> usize {
         if let Some(id) = self.strings.iter().position(|x| x == s) {
             return id;
@@ -307,195 +682,9 @@ impl StringPool {
     }
 }
 
-// ---------------------------------------------------------------------
-// Chunk builders
-// ---------------------------------------------------------------------
-
-fn build_gen8(pool: &mut StringPool) -> ChunkBuilder {
-    let mut c = ChunkBuilder::new("GEN8");
-
-    c.u8(0); // isDebuggerDisabled
-    c.u8(WAD_VERSION);
-    c.zero_bytes(2); // padding
-
-    c.str_ref(pool, "mygame"); // fileName
-    c.str_ref(pool, "Configs\\Default"); // config
-    c.u32(0); // lastObj (no objects defined)
-    c.u32(0); // lastTile (no tiles defined)
-    c.u32(0x1234_5678); // gameID (arbitrary)
-    c.zero_bytes(16); // directPlayGuid
-
-    c.str_ref(pool, "MyGame"); // name
-    c.u32(1); // major
-    c.u32(4); // minor
-    c.u32(9999); // release
-    c.u32(0); // build
-    c.u32(640); // defaultWindowWidth
-    c.u32(480); // defaultWindowHeight
-    c.u32(0); // info (bitflags)
-    c.u32(0); // licenseCRC32
-    c.zero_bytes(16); // licenseMD5
-
-    // wadVersion (13) is > 12, so we take the "full" tail below rather
-    // than the compact 12-and-under branch.
-    c.u64(0); // timestamp
-    c.str_ref(pool, "My Game"); // displayName
-    c.u64(0); // activeTargets
-    c.u64(0); // functionClassifications
-    c.i32(0); // steamAppID
-    // wadVersion < 14, so no debuggerPort field here.
-
-    c.u32(1); // roomOrderCount
-    c.i32(0); // roomOrder[0] -> our single room, index 0
-    // major == 1, so no GMS2 random-seed / FPS / GUID tail.
-
-    c
-}
-
-fn build_optn() -> ChunkBuilder {
-    let mut c = ChunkBuilder::new("OPTN");
-
-    // shaderExtensionFlag == 0x80000000 selects the "new" bitflag layout,
-    // which is far less fiddly to emit than the legacy bool-per-field one.
-    c.u32(0x8000_0000);
-    c.i32(1); // shaderExtVersion
-
-    c.u64(0x10); // info bitflags (0x10 = ShowCursor)
-    c.i32(0); // scale
-    c.u32(0); // windowColor
-    c.u32(32); // colorDepth
-    c.u32(0); // resolution
-    c.u32(60); // frequency
-    c.u32(1); // vertexSync
-    c.u32(0); // priority
-    c.u32(0); // backImage
-    c.u32(0); // frontImage
-    c.u32(0); // loadImage
-    c.u32(255); // loadAlpha
-
-    // wadVersion(13) > 8, so the Constants SimpleList is present; empty.
-    c.u32(0); // constantCount
-
-    c
-}
-
-fn build_room(pool: &mut StringPool, creation_code_id: i32) -> ChunkBuilder {
-    let mut c = ChunkBuilder::new("ROOM");
-
-    c.u32(1); // one room
-    let ptr0_pos = c.local_ref_placeholder();
-    let room_start = c.pos();
-    c.patches.push(Patch::Local(ptr0_pos, room_start));
-
-    c.str_ref(pool, "room0"); // name
-    c.str_ref(pool, ""); // caption
-    c.u32(640); // width
-    c.u32(480); // height
-    c.u32(30); // speed
-    c.bool32(false); // persistent
-    c.u32(0x00FF_FFFF); // backgroundColor
-    c.bool32(true); // drawBackgroundColor
-    c.i32(creation_code_id); // creationCodeId - runs your bytecode on room load
-    c.u32(0); // flags
-
-    let bg_off_pos = c.local_ref_placeholder();
-    let view_off_pos = c.local_ref_placeholder();
-    let obj_off_pos = c.local_ref_placeholder();
-    let tile_off_pos = c.local_ref_placeholder();
-
-    c.bool32(false); // world
-    c.u32(0); // top
-    c.u32(0); // left
-    c.u32(640); // right
-    c.u32(480); // bottom
-    c.f32(0.0); // gravityX
-    c.f32(10.0); // gravityY
-    c.f32(0.1); // metersPerPixel
-    // major == 1, so no layersFileOffset / sequencesPtr tail.
-
-    let bg_list_off = c.pos();
-    c.u32(0); // backgrounds: 0 entries (reader zero-fills all 8 slots)
-    let view_list_off = c.pos();
-    c.u32(0); // views: 0 entries
-    let obj_list_off = c.pos();
-    c.u32(0); // game objects: 0 entries
-    let tile_list_off = c.pos();
-    c.u32(0); // tiles: 0 entries
-
-    c.patches.push(Patch::Local(bg_off_pos, bg_list_off));
-    c.patches.push(Patch::Local(view_off_pos, view_list_off));
-    c.patches.push(Patch::Local(obj_off_pos, obj_list_off));
-    c.patches.push(Patch::Local(tile_off_pos, tile_list_off));
-
-    c
-}
-
-/// CODE chunk: a PointerList of entries. Uses the wadVersion<=14 ("old
-/// format") per-entry layout, which is just `name, length, <raw bytes>`
-/// with no locals/arguments/relative-address header.
-fn build_code(pool: &mut StringPool, code: &[CodeEntry]) -> ChunkBuilder {
-    let mut c = ChunkBuilder::new("CODE");
-
-    c.u32(code.len() as u32);
-    let ptr_positions: Vec<usize> = (0..code.len()).map(|_| c.local_ref_placeholder()).collect();
-
-    for (entry, ptr_pos) in code.iter().zip(ptr_positions) {
-        let entry_start = c.pos();
-        c.patches.push(Patch::Local(ptr_pos, entry_start));
-
-        c.str_ref(pool, &entry.name);
-        c.u32(entry.bytecode.len() as u32); // length
-        c.bytes(&entry.bytecode); // instructions, inline (oldFormat)
-    }
-
-    c
-}
-
-/// VARI chunk, wadVersion<=14 ("old format"): no header, and each entry is
-/// exactly 12 bytes (name, occurrences, firstAddress - no instanceType or
-/// varID, those only exist in the newer per-entry layout).
-///
-/// `occurrences`/`firstAddress` drive the runtime's bytecode-patching pass
-/// that resolves variable-name references it finds while scanning code.
-/// If gmlc already resolves variable IDs at compile time (baking them
-/// directly into the emitted bytecode) rather than relying on that patch
-/// chain, `occurrences = 0` / `firstAddress = -1` (the "nothing to patch"
-/// sentinel) is the right, inert choice used here. If your runner instead
-/// expects to walk this chain, thread the real occurrence/address data
-/// through from gmlc's compiler internals instead.
-fn build_vari(pool: &mut StringPool, variables: &[String]) -> ChunkBuilder {
-    let mut c = ChunkBuilder::new("VARI");
-    for name in variables {
-        c.str_ref(pool, name);
-        c.u32(0); // occurrences
-        c.i32(-1); // firstAddress sentinel (no patch chain)
-    }
-    c
-}
-
-fn build_func(pool: &mut StringPool, functions: &[String]) -> ChunkBuilder {
-    let mut c = ChunkBuilder::new("FUNC");
-    for name in functions {
-        c.str_ref(pool, name);
-        c.u32(0); // occurrences
-        c.i32(-1); // firstAddress sentinel (no patch chain)
-    }
-    c
-}
-
-// ---------------------------------------------------------------------
-// Extending this further
-// ---------------------------------------------------------------------
-// - Multiple scripts: already supported via `build_data_win_multi`/
-//   `CodeEntry`; only `code[0]` is wired to the room's creation code.
-// - Function references (built-in/script calls your bytecode makes): add
-//   a `build_func` mirroring `build_vari` and give `build_data_win_multi`
-//   a `functions: &[String]` parameter - currently FUNC is left empty
-//   (0 bytes), which the wadVersion<=14 branch reads as "zero functions".
-// - Real occurrence-patching data for VARI/FUNC: if your runner resolves
-//   variables lazily via this chain rather than at compile time, extend
-//   `CodeEntry`/a new `VariableEntry` type to carry the actual
-//   (occurrences, firstAddress) your compiler already tracks.
+// ================================================================
+// Tests
+// ================================================================
 
 #[cfg(test)]
 mod tests {
@@ -573,9 +762,7 @@ mod tests {
             assert_eq!(read_cstr(&out, name_off), *name);
         }
 
-        // Room's creationCodeId (5th field after name/caption strptrs,
-        // width, height, speed, persistent, bgcolor, drawbg -> offset
-        // computed below) points at our one CODE entry (index 0).
+        // Room's creationCodeId points at our one CODE entry (index 0).
         let (room_start, _) = find_chunk(&out, b"ROOM");
         let room0_ptr = read_u32(&out, room_start + 4) as usize;
         // name(4) caption(4) width(4) height(4) speed(4) persistent(4)
