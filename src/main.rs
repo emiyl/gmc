@@ -8,6 +8,7 @@ mod instruction;
 mod lexer;
 mod parser;
 mod resolver;
+mod wad_layout;
 
 use clap::Parser as ClapParser;
 use compiler::Compiler;

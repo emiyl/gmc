@@ -19,12 +19,8 @@
 //!      of the 4-byte length PREFIX that precedes those characters
 //!      (i.e. char_offset - 4).
 
-use std::io;
-use std::path::Path;
-
 use crate::Program;
-
-const WAD_VERSION: u8 = 13;
+use crate::wad_layout::WadLayout;
 
 // ================================================================
 // Public chunk structs
@@ -40,10 +36,6 @@ pub struct Gen8 {
     pub game_id: u32,
     pub direct_play_guid: [u8; 16],
     pub name: String,
-    pub major: u32,
-    pub minor: u32,
-    pub release: u32,
-    pub build_number: u32,
     pub default_window_width: u32,
     pub default_window_height: u32,
     /// GEN8 info bitflags.
@@ -55,6 +47,7 @@ pub struct Gen8 {
     pub active_targets: u64,
     pub function_classifications: u64,
     pub steam_app_id: i32,
+    pub debugger_port: u32,
     /// Room indices in load order; must correspond to rooms in the ROOM chunk
     /// by index.
     pub room_order: Vec<i32>,
@@ -71,10 +64,6 @@ impl Default for Gen8 {
             game_id: 0x1234_5678,
             direct_play_guid: [0; 16],
             name: "MyGame".to_string(),
-            major: 1,
-            minor: 4,
-            release: 9999,
-            build_number: 0,
             default_window_width: 640,
             default_window_height: 480,
             info: 0,
@@ -85,18 +74,41 @@ impl Default for Gen8 {
             active_targets: 0,
             function_classifications: 0,
             steam_app_id: 0,
+            debugger_port: 0,
             room_order: vec![0],
         }
     }
 }
 
 impl Gen8 {
-    fn serialize(&self, pool: &mut StringPool) -> ChunkBuilder {
+    fn serialize(&self, pool: &mut StringPool, layout: &WadLayout) -> ChunkBuilder {
         let mut c = ChunkBuilder::new("GEN8");
 
         c.u8(self.is_debugger_disabled as u8);
-        c.u8(WAD_VERSION);
+        c.u8(layout.wad_version);
         c.zero_bytes(2); // padding
+
+        if layout.compact_gen8 {
+            c.str_ref(pool, &self.file_name);
+            c.u32(self.last_obj);
+            c.u32(self.last_tile);
+            c.u32(self.game_id);
+            c.bytes(&self.direct_play_guid);
+            c.u32(self.default_window_width);
+            c.u32(self.default_window_height);
+            c.u32(self.info);
+            c.u32(self.license_crc32);
+            c.bytes(&self.license_md5);
+            c.u32(self.timestamp as u32);
+            c.zero_bytes(4); // padding
+
+            c.u32(self.room_order.len() as u32);
+            for &idx in &self.room_order {
+                c.i32(idx);
+            }
+
+            return c;
+        }
 
         c.str_ref(pool, &self.file_name);
         c.str_ref(pool, &self.config);
@@ -106,29 +118,52 @@ impl Gen8 {
         c.bytes(&self.direct_play_guid);
 
         c.str_ref(pool, &self.name);
-        c.u32(self.major);
-        c.u32(self.minor);
-        c.u32(self.release);
-        c.u32(self.build_number);
+        c.u32(layout.major);
+        c.u32(layout.minor);
+        c.u32(layout.release);
+        c.u32(layout.build);
         c.u32(self.default_window_width);
         c.u32(self.default_window_height);
         c.u32(self.info);
         c.u32(self.license_crc32);
         c.bytes(&self.license_md5);
 
-        // wadVersion > 12 -> full tail
-        c.u64(self.timestamp);
-        c.str_ref(pool, &self.display_name);
-        c.u64(self.active_targets);
-        c.u64(self.function_classifications);
-        c.i32(self.steam_app_id);
-        // wadVersion < 14 -> no debuggerPort field
+        if layout.timestamp_is_64bit {
+            c.u64(self.timestamp);
+            c.str_ref(pool, &self.display_name);
+            c.u64(self.active_targets);
+            c.u64(self.function_classifications);
+            c.i32(self.steam_app_id);
+            if layout.has_debugger_port {
+                c.u32(self.debugger_port);
+            }
+        } else {
+            c.i32(self.timestamp as i32);
+            c.zero_bytes(4); // padding
+            if layout.has_display_name {
+                c.str_ref(pool, &self.display_name);
+            }
+            if layout.has_active_targets {
+                c.u32(self.active_targets as u32);
+            }
+            if layout.has_function_classifications {
+                c.u32(self.function_classifications as u32);
+            }
+        }
 
         c.u32(self.room_order.len() as u32);
         for &idx in &self.room_order {
             c.i32(idx);
         }
-        // major == 1 -> no GMS2 random-seed / FPS / GUID tail
+
+        if layout.gms2_room_tail {
+            // major >= 2 tail: seed data + FPS + GameGUID.
+            c.zero_bytes(8); // firstRandom (int64)
+            c.zero_bytes(8 * 4); // 4 random entries
+            c.f32(60.0); // gms2FPS
+            c.bool32(false); // AllowStatistics
+            c.zero_bytes(16); // GameGUID
+        }
 
         c
     }
@@ -152,6 +187,7 @@ pub struct Optn {
     pub front_image: u32,
     pub load_image: u32,
     pub load_alpha: u32,
+    pub constant_count: u32,
 }
 
 impl Default for Optn {
@@ -169,12 +205,13 @@ impl Default for Optn {
             front_image: 0,
             load_image: 0,
             load_alpha: 255,
+            constant_count: 0,
         }
     }
 }
 
 impl Optn {
-    fn serialize(&self) -> ChunkBuilder {
+    fn serialize(&self, layout: &WadLayout) -> ChunkBuilder {
         let mut c = ChunkBuilder::new("OPTN");
 
         c.u32(0x8000_0000); // shaderExtensionFlag - selects new bitflag layout
@@ -193,7 +230,10 @@ impl Optn {
         c.u32(self.load_image);
         c.u32(self.load_alpha);
 
-        c.u32(0); // constantCount (wadVersion > 8 -> Constants list present, but empty)
+        // Constants SimpleList only exists for wadVersion > 8
+        if layout.has_constants {
+            c.u32(self.constant_count);
+        }
 
         c
     }
@@ -272,6 +312,7 @@ pub struct CodeEntry {
 /// };
 /// std::fs::write("data.win", dw.build())?;
 pub struct DataWin {
+    pub wad_version: u8,
     pub gen8: Gen8,
     pub optn: Optn,
     /// Rooms listed in ROOM-chunk order; `gen8.room_order` references these
@@ -285,9 +326,10 @@ pub struct DataWin {
     pub functions: Vec<String>,
 }
 
-impl Default for DataWin {
-    fn default() -> Self {
+impl DataWin {
+    pub fn new(wad_version: u8) -> Self {
         DataWin {
+            wad_version,
             gen8: Gen8::default(),
             optn: Optn::default(),
             rooms: vec![Room::default()],
@@ -298,15 +340,22 @@ impl Default for DataWin {
     }
 }
 
+impl Default for DataWin {
+    fn default() -> Self {
+        DataWin::new(17)
+    }
+}
+
 impl DataWin {
     /// Serialise all chunks into a complete `data.win` byte stream.
     pub fn build(&self) -> Vec<u8> {
         let mut pool = StringPool::new();
+        let layout = WadLayout::for_version(self.wad_version);
 
         // Chunk order matches the conventional GameMaker data.win layout.
         let mut chunks: Vec<ChunkBuilder> = vec![
-            self.gen8.serialize(&mut pool),
-            self.optn.serialize(),
+            self.gen8.serialize(&mut pool, &layout),
+            self.optn.serialize(&layout),
             ChunkBuilder::empty_list("EXTN"),
             ChunkBuilder::empty_list("SOND"),
             ChunkBuilder::empty_list("AGRP"),
@@ -319,11 +368,11 @@ impl DataWin {
             ChunkBuilder::empty_list("FONT"),
             ChunkBuilder::empty_list("TMLN"),
             ChunkBuilder::empty_list("OBJT"),
-            serialize_rooms(&self.rooms, &mut pool),
+            serialize_rooms(&self.rooms, &mut pool, &layout),
             ChunkBuilder::empty_list("TPAG"),
-            serialize_code(&self.code, &mut pool),
-            serialize_vari(&self.variables, &mut pool),
-            serialize_func(&self.functions, &mut pool),
+            serialize_code(&self.code, &mut pool, &layout),
+            serialize_vari(&self.variables, &mut pool, &layout),
+            serialize_func(&self.functions, &mut pool, &layout),
             ChunkBuilder::new("STRG"), // placeholder; rebuilt once its base offset is known
             ChunkBuilder::empty_list("TXTR"),
             ChunkBuilder::empty_list("AUDO"),
@@ -378,16 +427,11 @@ pub fn build_data_win_multi(
     .build()
 }
 
-/// Convenience wrapper: build and write straight to disk.
-pub fn write_data_win(path: impl AsRef<Path>, code_name: &str, program: Program) -> io::Result<()> {
-    std::fs::write(path, build_data_win(code_name, program))
-}
-
 // ================================================================
 // Private chunk serializers
 // ================================================================
 
-fn serialize_rooms(rooms: &[Room], pool: &mut StringPool) -> ChunkBuilder {
+fn serialize_rooms(rooms: &[Room], pool: &mut StringPool, layout: &WadLayout) -> ChunkBuilder {
     let mut c = ChunkBuilder::new("ROOM");
 
     c.u32(rooms.len() as u32);
@@ -424,6 +468,15 @@ fn serialize_rooms(rooms: &[Room], pool: &mut StringPool) -> ChunkBuilder {
         c.f32(room.gravity_y);
         c.f32(room.meters_per_pixel);
 
+        let layers_off_pos = if layout.gms2_room_tail {
+            Some(c.local_ref_placeholder())
+        } else {
+            None
+        };
+        if layout.gms2_room_tail && layout.gms2_3_sequences {
+            c.local_ref_placeholder(); // sequencesPtr: left at 0, unused when layerCount == 0
+        }
+
         let bg_list = c.pos();
         c.u32(0); // 0 backgrounds
         let view_list = c.pos();
@@ -437,6 +490,12 @@ fn serialize_rooms(rooms: &[Room], pool: &mut StringPool) -> ChunkBuilder {
         c.local_ref_set(view_off, view_list);
         c.local_ref_set(obj_off, obj_list);
         c.local_ref_set(tile_off, tile_list);
+
+        if let Some(layers_off_pos) = layers_off_pos {
+            let layers_list = c.pos();
+            c.u32(0); // 0 layers
+            c.local_ref_set(layers_off_pos, layers_list);
+        }
     }
 
     c
@@ -444,19 +503,50 @@ fn serialize_rooms(rooms: &[Room], pool: &mut StringPool) -> ChunkBuilder {
 
 /// CODE chunk: PointerList of compiled scripts (old / wadVersion <= 14 format).
 /// Each entry is `name, length, <raw bytes>` - no locals/arguments header.
-fn serialize_code(code: &[CodeEntry], pool: &mut StringPool) -> ChunkBuilder {
+fn serialize_code(code: &[CodeEntry], pool: &mut StringPool, layout: &WadLayout) -> ChunkBuilder {
     let mut c = ChunkBuilder::new("CODE");
 
     c.u32(code.len() as u32);
     let ptr_positions: Vec<usize> = (0..code.len()).map(|_| c.local_ref_placeholder()).collect();
 
-    for (entry, ptr_pos) in code.iter().zip(ptr_positions) {
-        let entry_start = c.pos();
-        c.local_ref_set(ptr_pos, entry_start);
+    if layout.old_code_format {
+        for (entry, ptr_pos) in code.iter().zip(ptr_positions) {
+            let entry_start = c.pos();
+            c.local_ref_set(ptr_pos, entry_start);
 
-        c.str_ref(pool, &entry.name);
-        c.u32(entry.bytecode.len() as u32);
-        c.bytes(&entry.bytecode);
+            c.str_ref(pool, &entry.name);
+            c.u32(entry.bytecode.len() as u32);
+            c.bytes(&entry.bytecode);
+        }
+    } else {
+        // New format: write every entry's fixed-size header first, then
+        // the bytecode blobs, so bytecodeRelAddr can point forward.
+        let mut rel_addr_field_positions = Vec::with_capacity(code.len());
+        for (entry, ptr_pos) in code.iter().zip(&ptr_positions) {
+            let entry_start = c.pos();
+            c.patches.push(Patch::Local(*ptr_pos, entry_start));
+
+            c.str_ref(pool, &entry.name);
+            c.u32(entry.bytecode.len() as u32); // length
+            c.u16(0); // localsCount
+            c.u16(0); // argumentsCount
+            let rel_addr_field_pos = c.pos();
+            c.i32(0); // bytecodeRelAddr placeholder, fixed up below
+            c.u32(0); // offset
+            rel_addr_field_positions.push(rel_addr_field_pos);
+        }
+
+        for (entry, rel_addr_field_pos) in code.iter().zip(rel_addr_field_positions) {
+            let bytecode_start = c.pos();
+            c.bytes(&entry.bytecode);
+
+            // bytecodeRelAddr is relative to the position of the field
+            // itself, and both positions are chunk-local, so we can
+            // compute and patch this immediately (no deferred Patch
+            // needed - it never depends on the file's final layout).
+            let rel = bytecode_start as i64 - rel_addr_field_pos as i64;
+            c.set_u32(rel_addr_field_pos, rel as i32 as u32);
+        }
     }
 
     c
@@ -465,24 +555,48 @@ fn serialize_code(code: &[CodeEntry], pool: &mut StringPool) -> ChunkBuilder {
 /// VARI chunk (wadVersion <= 14 "old format"): 12 bytes per variable, no
 /// header. `occurrences = 0` / `firstAddress = -1` signals that the runtime
 /// patch chain should not be walked (gmlc bakes variable IDs at compile time).
-fn serialize_vari(variables: &[String], pool: &mut StringPool) -> ChunkBuilder {
+fn serialize_vari(variables: &[String], pool: &mut StringPool, layout: &WadLayout) -> ChunkBuilder {
     let mut c = ChunkBuilder::new("VARI");
-    for name in variables {
-        c.str_ref(pool, name);
-        c.u32(0); // occurrences
-        c.i32(-1); // firstAddress sentinel (no patch chain)
+
+    if layout.old_code_format {
+        for name in variables {
+            c.str_ref(pool, name);
+            c.u32(0); // occurrences
+            c.i32(-1); // firstAddress sentinel (no patch chain)
+        }
+    } else {
+        c.u32(variables.len() as u32); // varCount1
+        c.u32(variables.len() as u32); // varCount2
+        c.u32(0); // maxLocalVarCount
+        for (i, name) in variables.iter().enumerate() {
+            c.str_ref(pool, name);
+            c.i32(0); // instanceType (self)
+            c.i32(i as i32); // varID
+            c.u32(0); // occurrences
+            c.i32(-1); // firstAddress sentinel
+        }
     }
     c
 }
 
 /// FUNC chunk: same layout as VARI.
-fn serialize_func(functions: &[String], pool: &mut StringPool) -> ChunkBuilder {
+fn serialize_func(functions: &[String], pool: &mut StringPool, layout: &WadLayout) -> ChunkBuilder {
     let mut c = ChunkBuilder::new("FUNC");
+
+    if !layout.old_code_format {
+        c.u32(functions.len() as u32); // functionCount
+    }
+
     for name in functions {
         c.str_ref(pool, name);
         c.u32(0); // occurrences
         c.i32(-1); // firstAddress sentinel (no patch chain)
     }
+
+    if !layout.old_code_format {
+        c.u32(0); // codeLocalsCount
+    }
+
     c
 }
 
@@ -610,6 +724,9 @@ impl ChunkBuilder {
 
     fn u8(&mut self, v: u8) {
         self.data.push(v);
+    }
+    fn u16(&mut self, v: u16) {
+        self.data.extend_from_slice(&v.to_le_bytes());
     }
     fn u32(&mut self, v: u32) {
         self.data.extend_from_slice(&v.to_le_bytes());
