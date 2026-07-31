@@ -1,5 +1,7 @@
 use crate::data_win::{ChunkBuilder, StringPool, WadLayout};
 use crate::project::GmRoom;
+use crate::project::resources::gm_room_layer::LayerTrait;
+use std::collections::HashMap;
 
 /// A single room entry for the ROOM chunk.
 pub struct CompiledRoom {
@@ -23,6 +25,16 @@ pub struct CompiledRoom {
     pub gravity_x: f32,
     pub gravity_y: f32,
     pub meters_per_pixel: f32,
+
+    pub instances: Vec<CompiledInstance>,
+}
+
+pub struct CompiledInstance {
+    pub id: u32,
+    pub object_id: u32,
+    pub x: f32,
+    pub y: f32,
+    pub creation_code_id: i32,
 }
 
 impl Default for CompiledRoom {
@@ -46,12 +58,14 @@ impl Default for CompiledRoom {
             gravity_x: 0.0,
             gravity_y: 10.0,
             meters_per_pixel: 0.1,
+
+            instances: Vec::new(),
         }
     }
 }
 
 impl CompiledRoom {
-    pub fn from_gmroom(room: GmRoom) -> Self {
+    pub fn from_gmroom(room: GmRoom, object_map: &HashMap<u32, String>) -> Self {
         CompiledRoom {
             name: room.name,
             width: room.room_settings.width,
@@ -62,6 +76,23 @@ impl CompiledRoom {
             gravity_x: room.physics_settings.physics_world_gravity_x,
             gravity_y: room.physics_settings.physics_world_gravity_y,
             meters_per_pixel: room.physics_settings.physics_world_pix_to_metres,
+            instances: room
+                .layers
+                .iter()
+                .flat_map(|layer| layer.instances().into_iter().flatten())
+                .enumerate()
+                .map(|(i, inst)| CompiledInstance {
+                    id: i as u32,
+                    object_id: object_map
+                        .iter()
+                        .find(|(_, name)| **name == inst.object.clone().unwrap().name)
+                        .map(|(id, _)| *id)
+                        .unwrap_or(0), // Default to 0 if not found
+                    x: inst.x,
+                    y: inst.y,
+                    creation_code_id: -1,
+                })
+                .collect(),
             ..Default::default()
         }
     }
@@ -121,8 +152,36 @@ pub fn serialize_rooms(
         c.u32(0); // 0 backgrounds
         let view_list = c.pos();
         c.u32(0); // 0 views
+
         let obj_list = c.pos();
-        c.u32(0); // 0 objects
+        c.u32(room.instances.len() as u32);
+
+        let ptr_positions: Vec<usize> = room
+            .instances
+            .iter()
+            .map(|_| c.local_ref_placeholder())
+            .collect();
+
+        for (instance, ptr_pos) in room.instances.iter().zip(ptr_positions) {
+            let instance_start = c.pos();
+
+            c.local_ref_set(ptr_pos, instance_start);
+
+            c.i32(instance.x as i32);
+            c.i32(instance.y as i32);
+            c.i32(instance.object_id as i32);
+            c.u32(instance.id);
+            c.i32(instance.creation_code_id);
+
+            // GMS 2.2.2.302+ fields:
+            c.f32(1.0); // scaleX
+            c.f32(1.0); // scaleY
+            c.f32(1.0); // imageSpeed
+            c.i32(0); // imageIndex
+            c.u32(0xFFFFFFFF); // color
+            c.f32(0.0); // rotation
+        }
+
         let tile_list = c.pos();
         c.u32(0); // 0 tiles
 

@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use crate::{
     data_win::{ChunkBuilder, StringPool},
     project::GmObject,
-    wad_layout::WadLayout,
 };
 
 #[derive(Debug, Clone)]
@@ -40,7 +39,7 @@ pub struct CompiledObject {
 
     pub physics_vertices: Vec<PhysicsVertex>,
 
-    pub event_lists: [Vec<CompiledEvent>; 17],
+    pub event_lists: [Vec<CompiledEvent>; 15],
 }
 
 #[derive(Debug, Clone)]
@@ -54,7 +53,6 @@ pub struct CompiledEvent {
 impl CompiledObject {
     pub fn from_gmobject(
         object: &GmObject,
-        _string_lookup: &HashMap<String, u32>,
         sprite_lookup: &HashMap<String, u32>,
         object_lookup: &HashMap<String, u32>,
         code_lookup: &HashMap<(String, i32, i32), u32>,
@@ -137,7 +135,7 @@ impl CompiledObject {
             physics_vertices,
 
             event_lists: {
-                let mut lists: [Vec<CompiledEvent>; 17] = Default::default();
+                let mut lists: [Vec<CompiledEvent>; 15] = Default::default();
                 for event in events {
                     if (event.event_type as usize) < lists.len() {
                         lists[event.event_type as usize].push(event);

@@ -135,7 +135,7 @@ impl GmRoom {
         }
     }
 
-    pub fn add_instance(&mut self, object_ref: ResourceRef, x: f64, y: f64) {
+    pub fn add_instance(&mut self, object_ref: ResourceRef, x: f32, y: f32) {
         let instance = Instance::new(object_ref, x, y);
         if let Some(Layer::Instance(instance_layer)) = self.layers.iter_mut().find(|layer| {
             if let Layer::Instance(instance_layer) = layer {

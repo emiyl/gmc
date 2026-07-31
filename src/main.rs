@@ -51,8 +51,8 @@ enum Commands {
         project_path: PathBuf,
         room_name: String,
         object_name: String,
-        x: Option<f64>,
-        y: Option<f64>,
+        x: Option<f32>,
+        y: Option<f32>,
     },
 }
 

@@ -27,7 +27,7 @@ pub struct Instance {
     pub image_index: i32,
 
     #[serde(rename = "imageSpeed")]
-    pub image_speed: f64,
+    pub image_speed: f32,
 
     #[serde(rename = "inheritCode")]
     pub inherit_code: bool,
@@ -52,16 +52,16 @@ pub struct Instance {
     #[serde(rename = "resourceVersion")]
     pub resource_version: String,
 
-    pub rotation: f64,
+    pub rotation: f32,
 
     #[serde(rename = "scaleX")]
-    pub scale_x: f64,
+    pub scale_x: f32,
 
     #[serde(rename = "scaleY")]
-    pub scale_y: f64,
+    pub scale_y: f32,
 
-    pub x: f64,
-    pub y: f64,
+    pub x: f32,
+    pub y: f32,
 }
 
 impl Default for Instance {
@@ -112,7 +112,7 @@ impl Instance {
         format!("inst_{:08X}", value)
     }
 
-    pub fn new(object: ResourceRef, x: f64, y: f64) -> Self {
+    pub fn new(object: ResourceRef, x: f32, y: f32) -> Self {
         Self {
             object: Some(object),
             x,
@@ -359,6 +359,27 @@ impl BackgroundLayer {
 pub enum Layer {
     Instance(InstanceLayer),
     Background(BackgroundLayer),
+}
+
+pub trait LayerTrait {
+    fn name(&self) -> &str;
+    fn instances(&self) -> Option<&Vec<Instance>>;
+}
+
+impl LayerTrait for Layer {
+    fn name(&self) -> &str {
+        match self {
+            Layer::Instance(layer) => &layer.name,
+            Layer::Background(layer) => &layer.name,
+        }
+    }
+
+    fn instances(&self) -> Option<&Vec<Instance>> {
+        match self {
+            Layer::Instance(layer) => Some(&layer.instances),
+            Layer::Background(_) => None,
+        }
+    }
 }
 
 impl Default for Layer {

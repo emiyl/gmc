@@ -19,17 +19,18 @@
 //!      of the 4-byte length PREFIX that precedes those characters
 //!      (i.e. char_offset - 4).
 
+mod code;
 mod object;
 mod room;
 
 use std::collections::HashMap;
 
-use room::CompiledRoom;
-
 use crate::Program;
-use crate::data_win::object::CompiledObject;
 use crate::project::{GmObject, GmProject, GmRoom};
 use crate::wad_layout::WadLayout;
+use code::CompiledCodeEntry;
+use object::CompiledObject;
+use room::CompiledRoom;
 
 // ================================================================
 // Public chunk structs
@@ -248,17 +249,6 @@ impl Optn {
     }
 }
 
-/// A single compiled script entry for the CODE chunk.
-///
-/// `name` follows the GameMaker convention (`gml_Script_<name>`,
-/// `gml_Object_<obj>_<event>`, `gml_RoomCC_<room>`, ...), though any unique
-/// label works for runners that do not do name-based lookups.
-#[derive(Clone)]
-pub struct CodeEntry {
-    pub name: String,
-    pub bytecode: Vec<u8>,
-}
-
 /// Top-level container for all chunk data.
 ///
 /// Populate the fields and call [`DataWin::build`] to get the raw bytes.
@@ -280,7 +270,7 @@ pub struct DataWin {
     pub rooms: Vec<CompiledRoom>,
     pub objects: Vec<CompiledObject>,
     /// Compiled scripts for the CODE chunk.
-    pub code: Vec<CodeEntry>,
+    pub code: Vec<CompiledCodeEntry>,
     /// Variable names referenced by code; written to the VARI chunk.
     pub variables: Vec<String>,
     /// Function names referenced by code; written to the FUNC chunk.
@@ -288,14 +278,39 @@ pub struct DataWin {
 }
 
 impl DataWin {
-    pub fn new(wad_version: u8, rooms: Vec<GmRoom>, objects: Vec<GmObject>) -> Self {
+    pub fn new(
+        wad_version: u8,
+        rooms: Vec<GmRoom>,
+        objects: Vec<GmObject>,
+        code: Vec<CompiledCodeEntry>,
+    ) -> Self {
+        let code_hashmap = code
+            .iter()
+            .enumerate()
+            .map(|(i, entry)| {
+                let owner = match &entry.owner {
+                    code::CompiledCodeOwner::Script { name } => (name.clone(), -1, -1),
+                    code::CompiledCodeOwner::ObjectEvent {
+                        object,
+                        event_type,
+                        event_num,
+                    } => (
+                        format!("Object_{}", object),
+                        *event_type as i32,
+                        event_num.value(),
+                    ),
+                };
+                (owner, i as u32)
+            })
+            .collect::<HashMap<_, _>>();
+
         DataWin {
             wad_version,
             gen8: Gen8::default(),
             optn: Optn::default(),
             rooms: rooms
                 .into_iter()
-                .map(|r| CompiledRoom::from_gmroom(r))
+                .map(|r| CompiledRoom::from_gmroom(r, &HashMap::new()))
                 .collect(),
             objects: objects
                 .into_iter()
@@ -304,12 +319,11 @@ impl DataWin {
                         &o,
                         &HashMap::new(),
                         &HashMap::new(),
-                        &HashMap::new(),
-                        &HashMap::new(),
+                        &code_hashmap,
                     )
                 })
                 .collect(),
-            code: Vec::new(),
+            code,
             variables: Vec::new(),
             functions: Vec::new(),
         }
@@ -318,7 +332,7 @@ impl DataWin {
 
 impl Default for DataWin {
     fn default() -> Self {
-        DataWin::new(17, Vec::new(), Vec::new())
+        DataWin::new(17, Vec::new(), Vec::new(), Vec::new())
     }
 }
 
@@ -346,7 +360,7 @@ impl DataWin {
             object::serialize_objects(&self.objects, &mut pool),
             room::serialize_rooms(&self.rooms, &mut pool, &layout),
             ChunkBuilder::empty_list("TPAG"),
-            serialize_code(&self.code, &mut pool, &layout),
+            code::serialize_code(&self.code, &mut pool, &layout),
             serialize_vari(&self.variables, &mut pool, &layout),
             serialize_func(&self.functions, &mut pool, &layout),
             ChunkBuilder::new("STRG"), // placeholder; rebuilt once its base offset is known
@@ -371,7 +385,10 @@ pub fn build_data_win(code_name: &str, program: Program) -> Vec<u8> {
             creation_code_id: 0,
             ..CompiledRoom::default()
         }],
-        code: vec![CodeEntry {
+        code: vec![CompiledCodeEntry {
+            owner: code::CompiledCodeOwner::Script {
+                name: code_name.to_string(),
+            },
             name: code_name.to_string(),
             bytecode: program.bytecode.data,
         }],
@@ -383,29 +400,59 @@ pub fn build_data_win(code_name: &str, program: Program) -> Vec<u8> {
 }
 
 pub fn build_data_win_from_gmproject(project: GmProject) -> Vec<u8> {
-    let code_entries = Vec::new();
-    let variables: Vec<String> = Vec::new();
-    let functions: Vec<String> = Vec::new();
+    let object_map: HashMap<u32, String> = project
+        .objects
+        .iter()
+        .enumerate()
+        .map(|(i, o)| (i as u32, o.name.clone()))
+        .collect();
+
+    let rooms = project
+        .rooms
+        .into_iter()
+        .map(|room| CompiledRoom::from_gmroom(room, &object_map))
+        .collect();
+
+    let mut variables: Vec<String> = Vec::new();
+    let mut functions: Vec<String> = Vec::new();
+
+    let code_entries = project
+        .code
+        .into_iter()
+        .map(|s| {
+            CompiledCodeEntry::from_code_entry(&s, &object_map, &mut functions, &mut variables)
+        })
+        .collect::<Vec<_>>();
+
+    let code_lookup: HashMap<(String, i32, i32), u32> = code_entries
+        .iter()
+        .enumerate()
+        .filter_map(|(i, entry)| match &entry.owner {
+            code::CompiledCodeOwner::ObjectEvent {
+                object,
+                event_type,
+                event_num,
+            } => {
+                let object_name = object_map.get(object)?.clone();
+
+                Some((
+                    (object_name, *event_type as i32, event_num.value()),
+                    i as u32,
+                ))
+            }
+            _ => None,
+        })
+        .collect();
+
+    let objects: Vec<CompiledObject> = project
+        .objects
+        .into_iter()
+        .map(|o| CompiledObject::from_gmobject(&o, &HashMap::new(), &HashMap::new(), &code_lookup))
+        .collect();
 
     DataWin {
-        rooms: project
-            .rooms
-            .into_iter()
-            .map(CompiledRoom::from_gmroom)
-            .collect(),
-        objects: project
-            .objects
-            .into_iter()
-            .map(|o| {
-                CompiledObject::from_gmobject(
-                    &o,
-                    &HashMap::new(),
-                    &HashMap::new(),
-                    &HashMap::new(),
-                    &HashMap::new(),
-                )
-            })
-            .collect(),
+        rooms,
+        objects,
         code: code_entries,
         variables,
         functions,
@@ -418,7 +465,7 @@ pub fn build_data_win_from_gmproject(project: GmProject) -> Vec<u8> {
 /// Only `code[0]` is wired to `room0`'s creation code; the rest ride along
 /// in the CODE chunk for runners that look scripts up by name or index.
 pub fn build_data_win_multi(
-    code: &[CodeEntry],
+    code: &[CompiledCodeEntry],
     variables: &[String],
     functions: &[String],
 ) -> Vec<u8> {
@@ -438,57 +485,6 @@ pub fn build_data_win_multi(
 // ================================================================
 // Private chunk serializers
 // ================================================================
-
-/// CODE chunk: PointerList of compiled scripts (old / wadVersion <= 14 format).
-/// Each entry is `name, length, <raw bytes>` - no locals/arguments header.
-fn serialize_code(code: &[CodeEntry], pool: &mut StringPool, layout: &WadLayout) -> ChunkBuilder {
-    let mut c = ChunkBuilder::new("CODE");
-
-    c.u32(code.len() as u32);
-    let ptr_positions: Vec<usize> = (0..code.len()).map(|_| c.local_ref_placeholder()).collect();
-
-    if layout.old_code_format {
-        for (entry, ptr_pos) in code.iter().zip(ptr_positions) {
-            let entry_start = c.pos();
-            c.local_ref_set(ptr_pos, entry_start);
-
-            c.str_ref(pool, &entry.name);
-            c.u32(entry.bytecode.len() as u32);
-            c.bytes(&entry.bytecode);
-        }
-    } else {
-        // New format: write every entry's fixed-size header first, then
-        // the bytecode blobs, so bytecodeRelAddr can point forward.
-        let mut rel_addr_field_positions = Vec::with_capacity(code.len());
-        for (entry, ptr_pos) in code.iter().zip(&ptr_positions) {
-            let entry_start = c.pos();
-            c.patches.push(Patch::Local(*ptr_pos, entry_start));
-
-            c.str_ref(pool, &entry.name);
-            c.u32(entry.bytecode.len() as u32); // length
-            c.u16(0); // localsCount
-            c.u16(0); // argumentsCount
-            let rel_addr_field_pos = c.pos();
-            c.i32(0); // bytecodeRelAddr placeholder, fixed up below
-            c.u32(0); // offset
-            rel_addr_field_positions.push(rel_addr_field_pos);
-        }
-
-        for (entry, rel_addr_field_pos) in code.iter().zip(rel_addr_field_positions) {
-            let bytecode_start = c.pos();
-            c.bytes(&entry.bytecode);
-
-            // bytecodeRelAddr is relative to the position of the field
-            // itself, and both positions are chunk-local, so we can
-            // compute and patch this immediately (no deferred Patch
-            // needed - it never depends on the file's final layout).
-            let rel = bytecode_start as i64 - rel_addr_field_pos as i64;
-            c.set_u32(rel_addr_field_pos, rel as i32 as u32);
-        }
-    }
-
-    c
-}
 
 /// VARI chunk (wadVersion <= 14 "old format"): 12 bytes per variable, no
 /// header. `occurrences = 0` / `firstAddress = -1` signals that the runtime

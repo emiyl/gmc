@@ -1,10 +1,14 @@
-mod gm_object;
-mod gm_room;
-mod gm_room_layer;
+pub mod event_type;
+pub mod gm_code;
+pub mod gm_object;
+pub mod gm_room;
+pub mod gm_room_layer;
 
+pub use event_type::{EventSubType, EventType};
+pub use gm_code::{CodeEntry, CodeOwner};
 pub use gm_object::GmObject;
 pub use gm_room::GmRoom;
-use serde::{Deserialize, Serialize};
+pub use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ResourceType {

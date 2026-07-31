@@ -2,23 +2,25 @@ mod formatter;
 mod gm_project;
 mod options;
 mod resource_order;
-mod resources;
+pub mod resources;
 
 use gm_project::GmProjectYyp;
 use options::Options;
 use resource_order::ResourceOrder;
-pub use resources::{GmObject, GmRoom, ResourceType};
-use serde::{Deserialize, Serialize};
+pub use resources::{
+    CodeEntry, EventSubType, EventType, GmObject, GmRoom, ResourceRef, ResourceType,
+};
 
-use crate::project::resources::ResourceRef;
+pub use crate::project::resources::CodeOwner;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct GmProject {
     pub yyp: GmProjectYyp,
     pub resource_order: ResourceOrder,
     pub options: Options,
     pub rooms: Vec<GmRoom>,
     pub objects: Vec<GmObject>,
+    pub code: Vec<CodeEntry>,
 }
 
 impl GmProject {
@@ -29,6 +31,7 @@ impl GmProject {
             options: Options::new(name),
             rooms: Vec::new(),
             objects: Vec::new(),
+            code: Vec::new(),
         }
     }
 
@@ -93,6 +96,8 @@ impl GmProject {
                     .expect("Failed to save object file");
             }
         }
+
+        let code_vec = &self.code;
 
         Ok(())
     }
@@ -168,12 +173,38 @@ impl GmProject {
             }
         }
 
+        // "objects/<object_name>/<code_name>.gml"
+        let mut code_vec = Vec::new();
+        for object in &objects_vec {
+            let object_dir = objects_dir.join(&object.name);
+            if object_dir.exists() {
+                for entry in
+                    std::fs::read_dir(&object_dir).expect("Failed to read object directory")
+                {
+                    let entry = entry.expect("Failed to read code entry");
+                    let path = entry.path();
+
+                    if path.is_file() && path.extension().map_or(false, |ext| ext == "gml") {
+                        let code_name = path
+                            .file_stem()
+                            .expect("Failed to get code file name")
+                            .to_string_lossy();
+                        let code =
+                            std::fs::read_to_string(&path).expect("Failed to read code file");
+                        let code_entry = CodeEntry::load(&path).expect("Failed to load code entry");
+                        code_vec.push(code_entry);
+                    }
+                }
+            }
+        }
+
         Ok(GmProject {
             yyp,
             resource_order,
             options,
             rooms: rooms_vec,
             objects: objects_vec,
+            code: code_vec,
         })
     }
 
@@ -221,8 +252,8 @@ impl GmProject {
         &mut self,
         room_name: &str,
         object_name: &str,
-        x: f64,
-        y: f64,
+        x: f32,
+        y: f32,
     ) -> std::io::Result<()> {
         // Find the room by name
         if let Some(room) = self.rooms.iter_mut().find(|r| r.name == room_name) {

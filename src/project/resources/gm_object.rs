@@ -3,7 +3,10 @@ use std::fs;
 use std::io::Read;
 use std::path::Path;
 
-use crate::project::formatter::format_gamemaker_json;
+use crate::project::{
+    formatter::format_gamemaker_json,
+    resources::event_type::{EventSubType, EventType},
+};
 
 use super::{Resource, ResourceRef};
 
@@ -117,102 +120,6 @@ pub struct Event {
     pub resource_version: String,
 }
 
-#[repr(i32)]
-#[derive(Debug, Clone, Copy)]
-pub enum EventType {
-    Create = 0,
-    Destroy = 1,
-    Alarm = 2,
-    Step = 3,
-    Collision = 4,
-    Keyboard = 5,
-    Mouse = 6,
-    Other = 7,
-    Draw = 8,
-    KeyPress = 9,
-    KeyRelease = 10,
-    Cleanup = 12,
-    PreCreate = 14,
-}
-
-#[repr(i32)]
-#[derive(Debug, Clone)]
-pub enum EventSubType {
-    None = 0,
-
-    Alarm(u32),
-
-    Step(StepEvent),
-    Draw(DrawEvent),
-    Mouse(MouseEvent),
-    Other(OtherEvent),
-
-    Keyboard(u32),
-    KeyPress(u32),
-    KeyRelease(u32),
-
-    Collision(String),
-}
-
-impl From<&EventSubType> for i32 {
-    fn from(event_subtype: &EventSubType) -> Self {
-        match event_subtype {
-            EventSubType::None => 0,
-            EventSubType::Alarm(n) => 1 + *n as i32,
-            EventSubType::Step(e) => 10 + *e as i32,
-            EventSubType::Draw(e) => 20 + *e as i32,
-            EventSubType::Mouse(e) => 30 + *e as i32,
-            EventSubType::Other(e) => 40 + *e as i32,
-            EventSubType::Keyboard(n) => 50 + *n as i32,
-            EventSubType::KeyPress(n) => 60 + *n as i32,
-            EventSubType::KeyRelease(n) => 70 + *n as i32,
-            EventSubType::Collision(_) => 80, // Collision events are more complex and may require additional handling
-        }
-    }
-}
-
-#[repr(i32)]
-#[derive(Debug, Clone, Copy)]
-pub enum StepEvent {
-    Normal = 0,
-    Begin = 1,
-    End = 2,
-}
-
-#[repr(i32)]
-#[derive(Debug, Clone, Copy)]
-pub enum DrawEvent {
-    Normal = 0,
-    Gui = 64,
-    Begin = 72,
-    End = 73,
-    GuiBegin = 74,
-    GuiEnd = 75,
-    Pre = 76,
-    Post = 77,
-}
-
-#[repr(i32)]
-#[derive(Debug, Clone, Copy)]
-pub enum MouseEvent {
-    LeftButton = 0,
-    RightButton = 1,
-    MiddleButton = 2,
-    // ...
-    WheelUp = 60,
-    WheelDown = 61,
-}
-
-#[repr(i32)]
-#[derive(Debug, Clone, Copy)]
-pub enum OtherEvent {
-    OutsideRoom = 0,
-    GameStart = 2,
-    RoomStart = 4,
-    // ...
-    AsyncSystem = 75,
-}
-
 impl Default for Event {
     fn default() -> Self {
         Self {
@@ -235,7 +142,7 @@ impl Default for GmObject {
             gm_object: "".into(),
             display_name_internal: "Object1".into(),
 
-            event_list: vec![],
+            event_list: vec![Event::default()],
 
             managed: true,
             name: "Object1".into(),

@@ -16,8 +16,8 @@ pub struct Function {
 }
 
 pub struct Resolver {
-    variables: HashMap<String, Variable>,
-    functions: HashMap<String, Function>,
+    pub variables: HashMap<String, Variable>,
+    pub functions: HashMap<String, Function>,
     var_next_index: u32,
     func_next_index: u32,
 }
