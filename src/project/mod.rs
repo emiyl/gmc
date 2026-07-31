@@ -1,0 +1,218 @@
+mod gm_project;
+mod options;
+mod resource_order;
+mod resources;
+
+use gm_project::GmProjectYyp;
+use options::Options;
+use resource_order::ResourceOrder;
+pub use resources::{GmObject, GmRoom, ResourceType};
+use serde::{Deserialize, Serialize};
+
+use crate::project::resources::ResourceRef;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GmProject {
+    pub yyp: GmProjectYyp,
+    pub resource_order: ResourceOrder,
+    pub options: Options,
+    pub rooms: Vec<GmRoom>,
+    pub objects: Vec<GmObject>,
+}
+
+impl GmProject {
+    pub fn new(name: &str) -> Self {
+        GmProject {
+            yyp: GmProjectYyp::new(name),
+            resource_order: ResourceOrder::new(),
+            options: Options::new(name),
+            rooms: Vec::new(),
+            objects: Vec::new(),
+        }
+    }
+
+    pub fn save(&self, project_path: &std::path::Path) -> std::io::Result<()> {
+        let parent_dir = project_path
+            .parent()
+            .expect("Failed to get parent directory of project path");
+        if !parent_dir.exists() {
+            std::fs::create_dir_all(parent_dir)?;
+        }
+
+        let datafiles_path = parent_dir.join("datafiles");
+        if !datafiles_path.exists() {
+            std::fs::create_dir_all(&datafiles_path)?;
+        }
+
+        let options_path = parent_dir.join("options");
+        self.options
+            .save(&options_path)
+            .expect("Failed to save options");
+
+        self.yyp
+            .save(&project_path)
+            .expect("Failed to save project file");
+
+        let resource_order_path = parent_dir.join(format!("{}.resource_order", self.yyp.name));
+        self.resource_order
+            .save(&resource_order_path)
+            .expect("Failed to save resource order");
+
+        let rooms_dir = parent_dir.join("rooms");
+        let rooms_vec = &self.rooms;
+        if !rooms_vec.is_empty() {
+            if !rooms_dir.exists() {
+                std::fs::create_dir_all(&rooms_dir)?;
+            }
+            for room in rooms_vec {
+                let room_dir = rooms_dir.join(&room.name);
+                if !room_dir.exists() {
+                    std::fs::create_dir_all(&room_dir)?;
+                }
+                let room_file_path = room_dir.join(format!("{}.yy", room.name));
+                room.save(&room_file_path)
+                    .expect("Failed to save room file");
+            }
+        }
+
+        let objects_dir = parent_dir.join("objects");
+        let objects_vec = &self.objects;
+        if !objects_vec.is_empty() {
+            if !objects_dir.exists() {
+                std::fs::create_dir_all(&objects_dir)?;
+            }
+            for object in objects_vec {
+                let object_dir = objects_dir.join(&object.name);
+                if !object_dir.exists() {
+                    std::fs::create_dir_all(&object_dir)?;
+                }
+                let object_file_path = object_dir.join(format!("{}.yy", object.name));
+                object
+                    .save(&object_file_path)
+                    .expect("Failed to save object file");
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn load(project_file_path: &std::path::Path) -> std::io::Result<Self> {
+        let yyp = GmProjectYyp::load(&project_file_path).expect("Failed to load project file");
+
+        let project_path = project_file_path
+            .parent()
+            .expect("Failed to get project directory");
+        let project_name = project_file_path
+            .file_stem()
+            .expect("Failed to get project name")
+            .to_string_lossy();
+
+        let resource_order_path = project_path.join(format!("{}.resource_order", project_name));
+        let resource_order =
+            ResourceOrder::load(&resource_order_path).expect("Failed to load resource order");
+
+        let options_path = project_path.join("options");
+        let options = Options::load(&options_path).expect("Failed to load options");
+
+        // load rooms
+        // room dir is <project_path>/rooms
+        let mut rooms_vec = Vec::new();
+        let rooms_dir = project_path.join("rooms");
+        if rooms_dir.exists() {
+            for entry in std::fs::read_dir(&rooms_dir).expect("Failed to read rooms directory") {
+                let entry = entry.expect("Failed to read room entry");
+                let path = entry.path();
+
+                // now check if the folder has a .yy file with the same name as the folder
+                if path.is_dir() {
+                    // Get the room name from the folder name
+                    let room_name = path
+                        .file_name()
+                        .expect("Failed to get room folder name")
+                        .to_string_lossy();
+                    let room_file_path = path.join(format!("{}.yy", room_name));
+
+                    if room_file_path.exists() {
+                        let room = GmRoom::load(&room_file_path).expect("Failed to load room");
+                        rooms_vec.push(room.clone());
+                    }
+                }
+            }
+        }
+
+        // load objects
+        let mut objects_vec = Vec::new();
+        let objects_dir = project_path.join("objects");
+        if objects_dir.exists() {
+            for entry in std::fs::read_dir(&objects_dir).expect("Failed to read objects directory")
+            {
+                let entry = entry.expect("Failed to read object entry");
+                let path = entry.path();
+
+                // now check if the folder has a .yy file with the same name as the folder
+                if path.is_dir() {
+                    // Get the object name from the folder name
+                    let object_name = path
+                        .file_name()
+                        .expect("Failed to get object folder name")
+                        .to_string_lossy();
+                    let object_file_path = path.join(format!("{}.yy", object_name));
+
+                    if object_file_path.exists() {
+                        let object =
+                            GmObject::load(&object_file_path).expect("Failed to load object");
+                        objects_vec.push(object.clone());
+                    }
+                }
+            }
+        }
+
+        Ok(GmProject {
+            yyp,
+            resource_order,
+            options,
+            rooms: rooms_vec,
+            objects: objects_vec,
+        })
+    }
+
+    pub fn add_resource(&mut self, resource_type: ResourceType, name: &str) {
+        match resource_type {
+            ResourceType::Room => self.add_room(name),
+            ResourceType::Object => self.add_object(name),
+            _ => {
+                println!("Resource type {:?} not implemented yet", resource_type);
+            }
+        }
+    }
+
+    fn add_room(&mut self, name: &str) {
+        let parent = ResourceRef {
+            name: self.yyp.name.clone(),
+            path: format!("{}.ypp", self.yyp.name),
+        };
+        self.yyp.add_resource(
+            ResourceType::Room,
+            name,
+            format!("rooms/{}/{}.yy", name, name).as_str(),
+        );
+        let room = GmRoom::new(name, parent);
+        self.rooms.push(room);
+    }
+
+    fn add_object(&mut self, name: &str) {
+        let parent = ResourceRef {
+            name: self.yyp.name.clone(),
+            path: format!("{}.ypp", self.yyp.name),
+        };
+        self.yyp.add_resource(
+            ResourceType::Object,
+            name,
+            format!("objects/{}/{}.yy", name, name).as_str(),
+        );
+        self.resource_order
+            .add_resource(name.to_string(), ResourceType::Object);
+        let object = GmObject::new(name, parent);
+        self.objects.push(object);
+    }
+}

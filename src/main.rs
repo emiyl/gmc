@@ -7,10 +7,11 @@ mod encoder;
 mod instruction;
 mod lexer;
 mod parser;
+mod project;
 mod resolver;
 mod wad_layout;
 
-use clap::Parser as ClapParser;
+use clap::{Parser as ClapParser, Subcommand};
 use compiler::Compiler;
 use env_logger::Builder;
 use lexer::Lexer;
@@ -18,6 +19,7 @@ use log::LevelFilter;
 use parser::Parser;
 use resolver::Resolver;
 use std::io::Write;
+use std::path::PathBuf;
 
 use crate::disassembler::print_disassembly;
 
@@ -25,12 +27,26 @@ use crate::disassembler::print_disassembly;
 #[command(name = "gmlc")]
 #[command(about = "GameMaker Language compiler")]
 struct Args {
-    /// Input file
-    input: String,
+    #[command(subcommand)]
+    command: Commands,
+}
 
-    /// Output file
-    #[arg(short, long)]
-    output: Option<String>,
+#[derive(Subcommand)]
+enum Commands {
+    Compile {
+        input: String,
+        #[arg(short, long)]
+        output: Option<String>,
+    },
+    Create {
+        project_name: String,
+        folder_path: Option<PathBuf>,
+    },
+    AddResource {
+        project_path: PathBuf,
+        resource_type: String,
+        resource_name: String,
+    },
 }
 
 pub struct Program {
@@ -69,22 +85,73 @@ fn create_program_from_gml(input: &str) -> Program {
 
 fn main() {
     let args: Args = ClapParser::parse();
+
     Builder::new()
         .filter_level(LevelFilter::Debug)
         .format(|buf, record| writeln!(buf, "{}", record.args()))
         .init();
 
-    let input = std::fs::read_to_string(&args.input).expect("Failed to read input file");
-    let program = create_program_from_gml(&input);
+    match args.command {
+        Commands::Compile { input, output } => {
+            let input_content = std::fs::read_to_string(&input).expect("Failed to read input file");
+            let program = create_program_from_gml(&input_content);
 
-    print_disassembly(&program.bytecode);
+            print_disassembly(&program.bytecode);
 
-    if args.output.is_none() {
-        println!("No output file specified. Use -o <file> to specify an output file.");
-    } else {
-        let output_data = data_win::build_data_win(&args.input, program);
-        let output_file = args.output.as_ref().unwrap();
-        std::fs::write(output_file, output_data).expect("Failed to write output file");
+            if let Some(output_file) = output {
+                let output_data = data_win::build_data_win(&input, program);
+                std::fs::write(output_file, output_data).expect("Failed to write output file");
+            } else {
+                println!("No output file specified. Use -o <file> to specify an output file.");
+            }
+        }
+        Commands::Create {
+            project_name,
+            folder_path,
+        } => {
+            let project_path = folder_path.unwrap_or_else(|| {
+                let mut path = std::env::current_dir().expect("Failed to get current directory");
+                path.push(&project_name);
+                path
+            });
+            let project_file_path = project_path.join(format!("{}.yyp", project_name));
+
+            let project = project::GmProject::new(&project_name);
+            if let Err(e) = project.save(&project_file_path) {
+                eprintln!("Failed to initialize project folder: {}", e);
+            } else {
+                println!(
+                    "Project '{}' initialized at '{}'",
+                    project_name,
+                    project_path.display()
+                );
+            }
+        }
+        Commands::AddResource {
+            project_path,
+            resource_type,
+            resource_name,
+        } => {
+            let mut project = match project::GmProject::load(&project_path) {
+                Ok(proj) => proj,
+                Err(e) => {
+                    eprintln!("Failed to load project: {}", e);
+                    return;
+                }
+            };
+
+            let resource_type_enum = match resource_type.as_str() {
+                "object" => project::ResourceType::Object,
+                "room" => project::ResourceType::Room,
+                _ => {
+                    eprintln!("Invalid resource type: {}", resource_type);
+                    return;
+                }
+            };
+
+            project.add_resource(resource_type_enum, &resource_name);
+            project.save(&project_path).expect("Failed to save project");
+        }
     }
 }
 
