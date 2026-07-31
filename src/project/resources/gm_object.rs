@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::Read;
 use std::path::Path;
 
 use crate::project::formatter::format_gamemaker_json;
@@ -193,8 +194,13 @@ impl GmObject {
     }
 
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
-        let text = fs::read_to_string(path)?;
-        Ok(serde_json::from_str(&text)?)
+        // read as json5
+        let mut file = fs::File::open(path)?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+        let value: serde_json::Value = json5::from_str(&contents)?;
+        let object: GmObject = serde_json::from_value(value)?;
+        Ok(object)
     }
 
     pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), Box<dyn std::error::Error>> {

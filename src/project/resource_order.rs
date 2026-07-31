@@ -1,7 +1,7 @@
+use crate::project::formatter::format_gamemaker_json;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
-use crate::project::formatter::format_gamemaker_json;
+use std::io::Read;
 
 use super::resources::ResourceType;
 
@@ -75,8 +75,12 @@ impl ResourceOrder {
     }
 
     pub fn load<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Self> {
-        let file = std::fs::File::open(path)?;
-        let resource_order: ResourceOrder = serde_json::from_reader(file)?;
+        let mut file = std::fs::File::open(path)?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+        let value: Value = json5::from_str(&contents).expect("Failed to parse JSON5");
+        let resource_order: ResourceOrder =
+            serde_json::from_value(value).expect("Failed to deserialize ResourceOrder");
         Ok(resource_order)
     }
 }

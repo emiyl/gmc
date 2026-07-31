@@ -100,17 +100,27 @@ fn main() {
 
     match args.command {
         Commands::Compile { input, output } => {
-            let input_content = std::fs::read_to_string(&input).expect("Failed to read input file");
-            let program = create_program_from_gml(&input_content);
+            let project_file = PathBuf::from(&input);
+            let project = match project::GmProject::load(&project_file) {
+                Ok(proj) => proj,
+                Err(e) => {
+                    eprintln!("Failed to load project: {}", e);
+                    return;
+                }
+            };
 
-            print_disassembly(&program.bytecode);
+            println!("Project loaded successfully: {:?}", project);
+            // let input_content = std::fs::read_to_string(&input).expect("Failed to read input file");
+            // let program = create_program_from_gml(&input_content);
 
-            if let Some(output_file) = output {
-                let output_data = data_win::build_data_win(&input, program);
-                std::fs::write(output_file, output_data).expect("Failed to write output file");
-            } else {
-                println!("No output file specified. Use -o <file> to specify an output file.");
-            }
+            // print_disassembly(&program.bytecode);
+
+            // if let Some(output_file) = output {
+            //     let output_data = data_win::build_data_win(&input, program);
+            //     std::fs::write(output_file, output_data).expect("Failed to write output file");
+            // } else {
+            //     println!("No output file specified. Use -o <file> to specify an output file.");
+            // }
         }
         Commands::Create {
             project_name,

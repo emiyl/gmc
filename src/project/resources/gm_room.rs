@@ -7,6 +7,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs;
+use std::io::Read;
 use std::path::Path;
 
 use crate::project::{
@@ -155,8 +156,13 @@ impl GmRoom {
     }
 
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, YyError> {
-        let contents = fs::read_to_string(path)?;
-        parse_str(&contents)
+        // read as json5
+        let mut file = fs::File::open(path)?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+        let value: Value = json5::from_str(&contents).expect("Failed to parse JSON5");
+        let room: GmRoom = serde_json::from_value(value).expect("Failed to deserialize GmRoom");
+        Ok(room)
     }
 
     pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), YyError> {
@@ -315,68 +321,4 @@ impl From<serde_json::Error> for YyError {
     fn from(e: serde_json::Error) -> Self {
         YyError::Json(e)
     }
-}
-
-/// Removes trailing commas that appear right before a closing `}` or `]`.
-///
-/// GameMaker's own serializer writes these (see the sample `Room1.yy`),
-/// but they are not valid JSON, so `serde_json` rejects them as-is.
-/// This walks the raw text once, tracking whether we're inside a quoted
-/// string (respecting `\"` escapes) so commas inside string values are
-/// left untouched.
-pub fn strip_trailing_commas(input: &str) -> String {
-    let bytes = input.as_bytes();
-    let mut out = String::with_capacity(input.len());
-    let mut in_string = false;
-    let mut escaped = false;
-    let mut i = 0;
-
-    while i < bytes.len() {
-        let c = bytes[i] as char;
-
-        if in_string {
-            out.push(c);
-            if escaped {
-                escaped = false;
-            } else if c == '\\' {
-                escaped = true;
-            } else if c == '"' {
-                in_string = false;
-            }
-            i += 1;
-            continue;
-        }
-
-        if c == '"' {
-            in_string = true;
-            out.push(c);
-            i += 1;
-            continue;
-        }
-
-        if c == ',' {
-            // Look ahead past whitespace to see if a closer follows.
-            let mut j = i + 1;
-            while j < bytes.len() && (bytes[j] as char).is_whitespace() {
-                j += 1;
-            }
-            if j < bytes.len() && (bytes[j] == b'}' || bytes[j] == b']') {
-                // Drop the comma; keep scanning from the closer.
-                i += 1;
-                continue;
-            }
-        }
-
-        out.push(c);
-        i += 1;
-    }
-
-    out
-}
-
-/// Parses `.yy` room JSON text (tolerating GameMaker's trailing commas).
-pub fn parse_str(contents: &str) -> Result<GmRoom, YyError> {
-    let cleaned = strip_trailing_commas(contents);
-    let room: GmRoom = serde_json::from_str(&cleaned)?;
-    Ok(room)
 }

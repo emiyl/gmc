@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::io::Read;
 
 use crate::project::{formatter::format_gamemaker_json, resources::ResourceType};
 
@@ -111,9 +112,13 @@ impl GmProjectYyp {
     }
 
     pub fn load<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Self> {
-        let file = std::fs::File::open(path)?;
-        let reader = std::io::BufReader::new(file);
-        let project: GmProjectYyp = serde_json::from_reader(reader)?;
+        let mut file = std::fs::File::open(path)?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+        let value: Value = json5::from_str(&contents).expect("Failed to parse JSON5");
+        let project: GmProjectYyp =
+            serde_json::from_value(value).expect("Failed to deserialize GmProjectYyp");
+
         Ok(project)
     }
 
