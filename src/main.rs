@@ -99,7 +99,10 @@ fn main() {
         .init();
 
     match args.command {
-        Commands::Compile { input, output } => {
+        Commands::Compile {
+            input,
+            output: output_path,
+        } => {
             let project_file = PathBuf::from(&input);
             let project = match project::GmProject::load(&project_file) {
                 Ok(proj) => proj,
@@ -115,12 +118,12 @@ fn main() {
 
             // print_disassembly(&program.bytecode);
 
-            // if let Some(output_file) = output {
-            //     let output_data = data_win::build_data_win(&input, program);
-            //     std::fs::write(output_file, output_data).expect("Failed to write output file");
-            // } else {
-            //     println!("No output file specified. Use -o <file> to specify an output file.");
-            // }
+            if let Some(output_path) = output_path {
+                std::fs::write(&output_path, output).expect("Failed to write output file");
+                println!("Output written to {}", output_path);
+            } else {
+                println!("No output path specified. Output not written.");
+            }
         }
         Commands::Create {
             project_name,
