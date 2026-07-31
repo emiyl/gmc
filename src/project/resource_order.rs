@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::project::formatter::format_gamemaker_json;
+
 use super::resources::ResourceType;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -71,9 +73,11 @@ impl ResourceOrder {
         Ok(())
     }
 
-    pub fn load<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Self> {
-        let file = std::fs::File::open(path)?;
-        let resource_order: ResourceOrder = serde_json::from_reader(file)?;
-        Ok(resource_order)
+    pub fn load<P: AsRef<std::path::Path>>(&self, path: P) -> std::io::Result<()> {
+        let value = serde_json::to_value(self)?;
+        let json = format_gamemaker_json(&value);
+        std::fs::write(path, json)?;
+
+        Ok(())
     }
 }

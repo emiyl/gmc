@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::project::resources::ResourceType;
+use crate::project::{formatter::format_gamemaker_json, resources::ResourceType};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GmProjectYyp {
@@ -118,9 +118,9 @@ impl GmProjectYyp {
     }
 
     pub fn save<P: AsRef<std::path::Path>>(&self, path: P) -> std::io::Result<()> {
-        let file = std::fs::File::create(path)?;
-        let writer = std::io::BufWriter::new(file);
-        serde_json::to_writer_pretty(writer, &self)?;
+        let value = serde_json::to_value(self)?;
+        let json = format_gamemaker_json(&value);
+        std::fs::write(path, json)?;
         Ok(())
     }
 }

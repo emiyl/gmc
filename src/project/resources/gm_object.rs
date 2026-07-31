@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
+use crate::project::formatter::format_gamemaker_json;
+
 use super::{Resource, ResourceRef};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -196,7 +198,8 @@ impl GmObject {
     }
 
     pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), Box<dyn std::error::Error>> {
-        let json = serde_json::to_string_pretty(self)?;
+        let value = serde_json::to_value(self)?;
+        let json = format_gamemaker_json(&value);
         fs::write(path, json)?;
         Ok(())
     }

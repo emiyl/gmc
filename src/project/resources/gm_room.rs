@@ -160,9 +160,9 @@ impl GmRoom {
     }
 
     pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), YyError> {
-        let json = serde_json::to_value(self)?;
-        let formatted = format_gamemaker_json(&json);
-        fs::write(path, formatted)?;
+        let value = serde_json::to_value(self)?;
+        let json = format_gamemaker_json(&value);
+        fs::write(path, json)?;
         Ok(())
     }
 }
