@@ -68,16 +68,15 @@ impl ResourceOrder {
     }
 
     pub fn save<P: AsRef<std::path::Path>>(&self, path: P) -> std::io::Result<()> {
-        let file = std::fs::File::create(path)?;
-        serde_json::to_writer_pretty(file, &self)?;
-        Ok(())
-    }
-
-    pub fn load<P: AsRef<std::path::Path>>(&self, path: P) -> std::io::Result<()> {
         let value = serde_json::to_value(self)?;
         let json = format_gamemaker_json(&value);
         std::fs::write(path, json)?;
-
         Ok(())
+    }
+
+    pub fn load<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Self> {
+        let file = std::fs::File::open(path)?;
+        let resource_order: ResourceOrder = serde_json::from_reader(file)?;
+        Ok(resource_order)
     }
 }
