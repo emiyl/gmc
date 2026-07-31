@@ -1,27 +1,12 @@
-mod ast;
-mod bytecode;
 mod compiler;
 mod data_win;
-mod disassembler;
-mod encoder;
-mod instruction;
-mod lexer;
-mod parser;
 mod project;
-mod resolver;
-mod wad_layout;
 
 use clap::{Parser as ClapParser, Subcommand};
-use compiler::Compiler;
 use env_logger::Builder;
-use lexer::Lexer;
 use log::LevelFilter;
-use parser::Parser;
-use resolver::Resolver;
 use std::io::Write;
 use std::path::PathBuf;
-
-use crate::disassembler::print_disassembly;
 
 #[derive(ClapParser)]
 #[command(name = "gmlc")]
@@ -54,40 +39,6 @@ enum Commands {
         x: Option<f32>,
         y: Option<f32>,
     },
-}
-
-pub struct Program {
-    pub bytecode: bytecode::Bytecode,
-    pub variables: Vec<resolver::Variable>,
-    pub functions: Vec<resolver::Function>,
-}
-
-impl Program {
-    pub fn new(
-        instructions: Vec<instruction::Instruction>,
-        variables: Vec<resolver::Variable>,
-        functions: Vec<resolver::Function>,
-    ) -> Self {
-        let bytecode = encoder::encode(instructions);
-        Self {
-            bytecode,
-            variables,
-            functions,
-        }
-    }
-}
-
-fn create_program_from_gml(input: &str) -> Program {
-    let lexer = Lexer::new(input.to_string());
-    let mut parser = Parser::new(lexer);
-    let program_ast = parser.parse_program();
-    log::debug!("Parsed AST: {:#?}", program_ast);
-
-    let mut compiler = Compiler::new();
-    compiler.compile_program(&program_ast);
-
-    let mut resolver = Resolver::new();
-    resolver.resolve(compiler.instructions)
 }
 
 fn main() {

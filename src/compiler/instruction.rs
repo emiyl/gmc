@@ -1,6 +1,6 @@
-use crate::ast::BinaryOp;
-use crate::bytecode::Opcode;
-use crate::resolver::{Function, Variable};
+use super::ast::BinaryOp;
+use super::bytecode::Opcode;
+use super::resolver::{Function, Variable};
 use num_enum::TryFromPrimitive;
 
 #[derive(Debug, Clone, Copy, TryFromPrimitive, PartialEq)]

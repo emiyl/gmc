@@ -1,7 +1,7 @@
-use crate::ast::*;
-use crate::bytecode::Opcode;
-use crate::instruction::*;
-use crate::resolver::{Function, Variable};
+use super::ast::*;
+use super::bytecode::Opcode;
+use super::instruction::*;
+use super::resolver::{Function, Variable};
 
 fn value_type_from_expr(expr: &Expr) -> ValueType {
     match expr {

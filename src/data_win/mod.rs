@@ -22,15 +22,16 @@
 mod code;
 mod object;
 mod room;
+mod wad_layout;
 
 use std::collections::HashMap;
 
-use crate::Program;
+use crate::compiler::Program;
 use crate::project::{GmObject, GmProject, GmRoom};
-use crate::wad_layout::WadLayout;
 use code::CompiledCodeEntry;
 use object::CompiledObject;
 use room::CompiledRoom;
+use wad_layout::WadLayout;
 
 // ================================================================
 // Public chunk structs

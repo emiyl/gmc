@@ -1,7 +1,7 @@
-use crate::ast::BinaryOp;
-use crate::bytecode::*;
-use crate::instruction::*;
-use crate::resolver::Variable;
+use super::ast::BinaryOp;
+use super::bytecode::*;
+use super::instruction::*;
+use super::resolver::Variable;
 
 #[derive(Debug)]
 pub struct Word {

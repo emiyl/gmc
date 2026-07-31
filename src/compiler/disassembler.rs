@@ -1,4 +1,4 @@
-use crate::{
+use super::{
     bytecode::{Bytecode, Opcode},
     encoder::Word,
     instruction::{CmpType, ValueType},

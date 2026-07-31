@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use crate::Program;
-use crate::instruction::Instruction;
+use super::Program;
+use super::instruction::Instruction;
 
 #[derive(Debug, Clone)]
 pub struct Variable {

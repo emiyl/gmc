@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
+use super::WadLayout;
 use crate::{
-    compiler::Compiler,
+    compiler::compiler::Compiler,
+    compiler::lexer::Lexer,
+    compiler::parser::Parser,
+    compiler::resolver::Resolver,
     data_win::{ChunkBuilder, Patch, StringPool},
-    lexer::Lexer,
-    parser::Parser,
     project::{CodeEntry, CodeOwner, EventSubType, EventType},
-    resolver::Resolver,
-    wad_layout::WadLayout,
 };
 
 #[derive(Debug, Clone)]

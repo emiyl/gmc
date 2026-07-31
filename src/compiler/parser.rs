@@ -1,8 +1,8 @@
 use core::panic;
 
-use crate::ast::*;
-use crate::lexer::Token::Identifier;
-use crate::lexer::{Lexer, Token};
+use super::ast::*;
+use super::lexer::Token::Identifier;
+use super::lexer::{Lexer, Token};
 
 #[derive(Debug)]
 pub struct Parser {
