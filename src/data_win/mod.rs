@@ -19,8 +19,16 @@
 //!      of the 4-byte length PREFIX that precedes those characters
 //!      (i.e. char_offset - 4).
 
+mod object;
+mod room;
+
+use std::collections::HashMap;
+
+use room::CompiledRoom;
+
 use crate::Program;
-use crate::project::{GmProject, GmRoom};
+use crate::data_win::object::CompiledObject;
+use crate::project::{GmObject, GmProject, GmRoom};
 use crate::wad_layout::WadLayout;
 
 // ================================================================
@@ -240,72 +248,6 @@ impl Optn {
     }
 }
 
-/// A single room entry for the ROOM chunk.
-pub struct DataWinRoom {
-    pub name: String,
-    pub caption: String,
-    pub width: u32,
-    pub height: u32,
-    pub speed: u32,
-    pub persistent: bool,
-    pub background_color: u32,
-    pub draw_background_color: bool,
-    /// Index into the CODE chunk whose bytecode runs when this room loads,
-    /// or `-1` for none.
-    pub creation_code_id: i32,
-    pub flags: u32,
-    pub world: bool,
-    pub top: u32,
-    pub left: u32,
-    pub right: u32,
-    pub bottom: u32,
-    pub gravity_x: f32,
-    pub gravity_y: f32,
-    pub meters_per_pixel: f32,
-}
-
-impl Default for DataWinRoom {
-    fn default() -> Self {
-        DataWinRoom {
-            name: "room0".to_string(),
-            caption: String::new(),
-            width: 640,
-            height: 480,
-            speed: 30,
-            persistent: false,
-            background_color: 0x00FF_FFFF,
-            draw_background_color: true,
-            creation_code_id: -1,
-            flags: 0,
-            world: false,
-            top: 0,
-            left: 0,
-            right: 640,
-            bottom: 480,
-            gravity_x: 0.0,
-            gravity_y: 10.0,
-            meters_per_pixel: 0.1,
-        }
-    }
-}
-
-impl DataWinRoom {
-    fn from_gmroom(room: GmRoom) -> Self {
-        DataWinRoom {
-            name: room.name,
-            width: room.room_settings.width,
-            height: room.room_settings.height,
-            creation_code_id: -1, // This will be set when adding code
-            flags: 0,             // This can be set based on GmRoom properties if needed
-            world: room.physics_settings.physics_world,
-            gravity_x: room.physics_settings.physics_world_gravity_x,
-            gravity_y: room.physics_settings.physics_world_gravity_y,
-            meters_per_pixel: room.physics_settings.physics_world_pix_to_metres,
-            ..Default::default()
-        }
-    }
-}
-
 /// A single compiled script entry for the CODE chunk.
 ///
 /// `name` follows the GameMaker convention (`gml_Script_<name>`,
@@ -335,7 +277,8 @@ pub struct DataWin {
     pub optn: Optn,
     /// Rooms listed in ROOM-chunk order; `gen8.room_order` references these
     /// by index.
-    pub rooms: Vec<DataWinRoom>,
+    pub rooms: Vec<CompiledRoom>,
+    pub objects: Vec<CompiledObject>,
     /// Compiled scripts for the CODE chunk.
     pub code: Vec<CodeEntry>,
     /// Variable names referenced by code; written to the VARI chunk.
@@ -345,14 +288,26 @@ pub struct DataWin {
 }
 
 impl DataWin {
-    pub fn new(wad_version: u8, rooms: Vec<GmRoom>) -> Self {
+    pub fn new(wad_version: u8, rooms: Vec<GmRoom>, objects: Vec<GmObject>) -> Self {
         DataWin {
             wad_version,
             gen8: Gen8::default(),
             optn: Optn::default(),
             rooms: rooms
                 .into_iter()
-                .map(|r| DataWinRoom::from_gmroom(r))
+                .map(|r| CompiledRoom::from_gmroom(r))
+                .collect(),
+            objects: objects
+                .into_iter()
+                .map(|o| {
+                    CompiledObject::from_gmobject(
+                        &o,
+                        &HashMap::new(),
+                        &HashMap::new(),
+                        &HashMap::new(),
+                        &HashMap::new(),
+                    )
+                })
                 .collect(),
             code: Vec::new(),
             variables: Vec::new(),
@@ -363,7 +318,7 @@ impl DataWin {
 
 impl Default for DataWin {
     fn default() -> Self {
-        DataWin::new(17, Vec::new())
+        DataWin::new(17, Vec::new(), Vec::new())
     }
 }
 
@@ -388,8 +343,8 @@ impl DataWin {
             ChunkBuilder::empty_list("SHDR"),
             ChunkBuilder::empty_list("FONT"),
             ChunkBuilder::empty_list("TMLN"),
-            ChunkBuilder::empty_list("OBJT"),
-            serialize_rooms(&self.rooms, &mut pool, &layout),
+            object::serialize_objects(&self.objects, &mut pool),
+            room::serialize_rooms(&self.rooms, &mut pool, &layout),
             ChunkBuilder::empty_list("TPAG"),
             serialize_code(&self.code, &mut pool, &layout),
             serialize_vari(&self.variables, &mut pool, &layout),
@@ -412,9 +367,9 @@ impl DataWin {
 /// creation code so a standard runner executes it on room load.
 pub fn build_data_win(code_name: &str, program: Program) -> Vec<u8> {
     DataWin {
-        rooms: vec![DataWinRoom {
+        rooms: vec![CompiledRoom {
             creation_code_id: 0,
-            ..DataWinRoom::default()
+            ..CompiledRoom::default()
         }],
         code: vec![CodeEntry {
             name: code_name.to_string(),
@@ -436,7 +391,20 @@ pub fn build_data_win_from_gmproject(project: GmProject) -> Vec<u8> {
         rooms: project
             .rooms
             .into_iter()
-            .map(DataWinRoom::from_gmroom)
+            .map(CompiledRoom::from_gmroom)
+            .collect(),
+        objects: project
+            .objects
+            .into_iter()
+            .map(|o| {
+                CompiledObject::from_gmobject(
+                    &o,
+                    &HashMap::new(),
+                    &HashMap::new(),
+                    &HashMap::new(),
+                    &HashMap::new(),
+                )
+            })
             .collect(),
         code: code_entries,
         variables,
@@ -455,9 +423,9 @@ pub fn build_data_win_multi(
     functions: &[String],
 ) -> Vec<u8> {
     DataWin {
-        rooms: vec![DataWinRoom {
+        rooms: vec![CompiledRoom {
             creation_code_id: if code.is_empty() { -1 } else { 0 },
-            ..DataWinRoom::default()
+            ..CompiledRoom::default()
         }],
         code: code.to_vec(),
         variables: variables.to_vec(),
@@ -470,80 +438,6 @@ pub fn build_data_win_multi(
 // ================================================================
 // Private chunk serializers
 // ================================================================
-
-fn serialize_rooms(
-    rooms: &[DataWinRoom],
-    pool: &mut StringPool,
-    layout: &WadLayout,
-) -> ChunkBuilder {
-    let mut c = ChunkBuilder::new("ROOM");
-
-    c.u32(rooms.len() as u32);
-    let ptr_positions: Vec<usize> = (0..rooms.len())
-        .map(|_| c.local_ref_placeholder())
-        .collect();
-
-    for (room, ptr_pos) in rooms.iter().zip(ptr_positions) {
-        let room_start = c.pos();
-        c.local_ref_set(ptr_pos, room_start);
-
-        c.str_ref(pool, &room.name);
-        c.str_ref(pool, &room.caption);
-        c.u32(room.width);
-        c.u32(room.height);
-        c.u32(room.speed);
-        c.bool32(room.persistent);
-        c.u32(room.background_color);
-        c.bool32(room.draw_background_color);
-        c.i32(room.creation_code_id);
-        c.u32(room.flags);
-
-        let bg_off = c.local_ref_placeholder();
-        let view_off = c.local_ref_placeholder();
-        let obj_off = c.local_ref_placeholder();
-        let tile_off = c.local_ref_placeholder();
-
-        c.bool32(room.world);
-        c.u32(room.top);
-        c.u32(room.left);
-        c.u32(room.right);
-        c.u32(room.bottom);
-        c.f32(room.gravity_x);
-        c.f32(room.gravity_y);
-        c.f32(room.meters_per_pixel);
-
-        let layers_off_pos = if layout.gms2_room_tail {
-            Some(c.local_ref_placeholder())
-        } else {
-            None
-        };
-        if layout.gms2_room_tail && layout.gms2_3_sequences {
-            c.local_ref_placeholder(); // sequencesPtr: left at 0, unused when layerCount == 0
-        }
-
-        let bg_list = c.pos();
-        c.u32(0); // 0 backgrounds
-        let view_list = c.pos();
-        c.u32(0); // 0 views
-        let obj_list = c.pos();
-        c.u32(0); // 0 objects
-        let tile_list = c.pos();
-        c.u32(0); // 0 tiles
-
-        c.local_ref_set(bg_off, bg_list);
-        c.local_ref_set(view_off, view_list);
-        c.local_ref_set(obj_off, obj_list);
-        c.local_ref_set(tile_off, tile_list);
-
-        if let Some(layers_off_pos) = layers_off_pos {
-            let layers_list = c.pos();
-            c.u32(0); // 0 layers
-            c.local_ref_set(layers_off_pos, layers_list);
-        }
-    }
-
-    c
-}
 
 /// CODE chunk: PointerList of compiled scripts (old / wadVersion <= 14 format).
 /// Each entry is `name, length, <raw bytes>` - no locals/arguments header.

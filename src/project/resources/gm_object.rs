@@ -139,7 +139,7 @@ impl Default for GmObject {
             gm_object: "".into(),
             display_name_internal: "Object1".into(),
 
-            event_list: vec![Event::default()],
+            event_list: vec![],
 
             managed: true,
             name: "Object1".into(),
