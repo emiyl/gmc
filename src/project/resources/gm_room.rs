@@ -184,11 +184,11 @@ pub struct PhysicsSettings {
     #[serde(rename = "PhysicsWorld")]
     pub physics_world: bool,
     #[serde(rename = "PhysicsWorldGravityX")]
-    pub physics_world_gravity_x: f64,
+    pub physics_world_gravity_x: f32,
     #[serde(rename = "PhysicsWorldGravityY")]
-    pub physics_world_gravity_y: f64,
+    pub physics_world_gravity_y: f32,
     #[serde(rename = "PhysicsWorldPixToMetres")]
-    pub physics_world_pix_to_metres: f64,
+    pub physics_world_pix_to_metres: f32,
 }
 
 impl Default for PhysicsSettings {
@@ -206,12 +206,12 @@ impl Default for PhysicsSettings {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RoomSettings {
     #[serde(rename = "Height")]
-    pub height: i64,
+    pub height: u32,
     #[serde(rename = "inheritRoomSettings")]
     pub inherit_room_settings: bool,
     pub persistent: bool,
     #[serde(rename = "Width")]
-    pub width: i64,
+    pub width: u32,
 }
 
 impl Default for RoomSettings {

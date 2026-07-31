@@ -109,7 +109,7 @@ fn main() {
                 }
             };
 
-            println!("Project loaded successfully: {:?}", project);
+            let output = data_win::build_data_win_from_gmproject(project);
             // let input_content = std::fs::read_to_string(&input).expect("Failed to read input file");
             // let program = create_program_from_gml(&input_content);
 

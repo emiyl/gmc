@@ -20,6 +20,7 @@
 //!      (i.e. char_offset - 4).
 
 use crate::Program;
+use crate::project::{GmProject, GmRoom};
 use crate::wad_layout::WadLayout;
 
 // ================================================================
@@ -240,7 +241,7 @@ impl Optn {
 }
 
 /// A single room entry for the ROOM chunk.
-pub struct Room {
+pub struct DataWinRoom {
     pub name: String,
     pub caption: String,
     pub width: u32,
@@ -263,9 +264,9 @@ pub struct Room {
     pub meters_per_pixel: f32,
 }
 
-impl Default for Room {
+impl Default for DataWinRoom {
     fn default() -> Self {
-        Room {
+        DataWinRoom {
             name: "room0".to_string(),
             caption: String::new(),
             width: 640,
@@ -284,6 +285,23 @@ impl Default for Room {
             gravity_x: 0.0,
             gravity_y: 10.0,
             meters_per_pixel: 0.1,
+        }
+    }
+}
+
+impl DataWinRoom {
+    fn from_gmroom(room: GmRoom) -> Self {
+        DataWinRoom {
+            name: room.name,
+            width: room.room_settings.width,
+            height: room.room_settings.height,
+            creation_code_id: -1, // This will be set when adding code
+            flags: 0,             // This can be set based on GmRoom properties if needed
+            world: room.physics_settings.physics_world,
+            gravity_x: room.physics_settings.physics_world_gravity_x,
+            gravity_y: room.physics_settings.physics_world_gravity_y,
+            meters_per_pixel: room.physics_settings.physics_world_pix_to_metres,
+            ..Default::default()
         }
     }
 }
@@ -317,7 +335,7 @@ pub struct DataWin {
     pub optn: Optn,
     /// Rooms listed in ROOM-chunk order; `gen8.room_order` references these
     /// by index.
-    pub rooms: Vec<Room>,
+    pub rooms: Vec<DataWinRoom>,
     /// Compiled scripts for the CODE chunk.
     pub code: Vec<CodeEntry>,
     /// Variable names referenced by code; written to the VARI chunk.
@@ -327,12 +345,15 @@ pub struct DataWin {
 }
 
 impl DataWin {
-    pub fn new(wad_version: u8) -> Self {
+    pub fn new(wad_version: u8, rooms: Vec<GmRoom>) -> Self {
         DataWin {
             wad_version,
             gen8: Gen8::default(),
             optn: Optn::default(),
-            rooms: vec![Room::default()],
+            rooms: rooms
+                .into_iter()
+                .map(|r| DataWinRoom::from_gmroom(r))
+                .collect(),
             code: Vec::new(),
             variables: Vec::new(),
             functions: Vec::new(),
@@ -342,7 +363,7 @@ impl DataWin {
 
 impl Default for DataWin {
     fn default() -> Self {
-        DataWin::new(17)
+        DataWin::new(17, Vec::new())
     }
 }
 
@@ -391,9 +412,9 @@ impl DataWin {
 /// creation code so a standard runner executes it on room load.
 pub fn build_data_win(code_name: &str, program: Program) -> Vec<u8> {
     DataWin {
-        rooms: vec![Room {
+        rooms: vec![DataWinRoom {
             creation_code_id: 0,
-            ..Room::default()
+            ..DataWinRoom::default()
         }],
         code: vec![CodeEntry {
             name: code_name.to_string(),
@@ -401,6 +422,25 @@ pub fn build_data_win(code_name: &str, program: Program) -> Vec<u8> {
         }],
         variables: program.variables.into_iter().map(|v| v.name).collect(),
         functions: program.functions.into_iter().map(|f| f.name).collect(),
+        ..DataWin::default()
+    }
+    .build()
+}
+
+pub fn build_data_win_from_gmproject(project: GmProject) -> Vec<u8> {
+    let code_entries = Vec::new();
+    let variables: Vec<String> = Vec::new();
+    let functions: Vec<String> = Vec::new();
+
+    DataWin {
+        rooms: project
+            .rooms
+            .into_iter()
+            .map(DataWinRoom::from_gmroom)
+            .collect(),
+        code: code_entries,
+        variables,
+        functions,
         ..DataWin::default()
     }
     .build()
@@ -415,9 +455,9 @@ pub fn build_data_win_multi(
     functions: &[String],
 ) -> Vec<u8> {
     DataWin {
-        rooms: vec![Room {
+        rooms: vec![DataWinRoom {
             creation_code_id: if code.is_empty() { -1 } else { 0 },
-            ..Room::default()
+            ..DataWinRoom::default()
         }],
         code: code.to_vec(),
         variables: variables.to_vec(),
@@ -431,7 +471,11 @@ pub fn build_data_win_multi(
 // Private chunk serializers
 // ================================================================
 
-fn serialize_rooms(rooms: &[Room], pool: &mut StringPool, layout: &WadLayout) -> ChunkBuilder {
+fn serialize_rooms(
+    rooms: &[DataWinRoom],
+    pool: &mut StringPool,
+    layout: &WadLayout,
+) -> ChunkBuilder {
     let mut c = ChunkBuilder::new("ROOM");
 
     c.u32(rooms.len() as u32);
