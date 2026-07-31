@@ -70,10 +70,10 @@ pub struct GmRoom {
     #[serde(rename = "sequenceId")]
     pub sequence_id: Option<Value>,
 
+    pub views: Vec<View>,
+
     #[serde(rename = "viewSettings")]
     pub view_settings: ViewSettings,
-
-    pub views: Vec<View>,
 
     pub volume: f64,
 }
