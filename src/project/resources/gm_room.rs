@@ -10,7 +10,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::project::{
-    formatter::format_json,
+    formatter::format_gamemaker_json,
     resources::gm_room_layer::{Instance, Layer},
 };
 
@@ -160,8 +160,8 @@ impl GmRoom {
     }
 
     pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), YyError> {
-        let json = serde_json::to_string(self)?;
-        let formatted = format_json(&json);
+        let json = serde_json::to_value(self)?;
+        let formatted = format_gamemaker_json(&json);
         fs::write(path, formatted)?;
         Ok(())
     }
@@ -173,6 +173,8 @@ impl GmRoom {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PhysicsSettings {
+    #[serde(rename = "inheritPhysicsSettings")]
+    pub inherit_physics_settings: bool,
     #[serde(rename = "PhysicsWorld")]
     pub physics_world: bool,
     #[serde(rename = "PhysicsWorldGravityX")]
@@ -181,18 +183,16 @@ pub struct PhysicsSettings {
     pub physics_world_gravity_y: f64,
     #[serde(rename = "PhysicsWorldPixToMetres")]
     pub physics_world_pix_to_metres: f64,
-    #[serde(rename = "inheritPhysicsSettings")]
-    pub inherit_physics_settings: bool,
 }
 
 impl Default for PhysicsSettings {
     fn default() -> Self {
         PhysicsSettings {
+            inherit_physics_settings: false,
             physics_world: false,
             physics_world_gravity_x: 0.0,
             physics_world_gravity_y: 10.0,
             physics_world_pix_to_metres: 0.1,
-            inherit_physics_settings: false,
         }
     }
 }
@@ -201,11 +201,11 @@ impl Default for PhysicsSettings {
 pub struct RoomSettings {
     #[serde(rename = "Height")]
     pub height: i64,
-    #[serde(rename = "Width")]
-    pub width: i64,
     #[serde(rename = "inheritRoomSettings")]
     pub inherit_room_settings: bool,
     pub persistent: bool,
+    #[serde(rename = "Width")]
+    pub width: i64,
 }
 
 impl Default for RoomSettings {

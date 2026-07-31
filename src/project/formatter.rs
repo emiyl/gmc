@@ -1,89 +1,124 @@
-pub fn format_json(json: &str) -> String {
-    let json =
-        serde_json::to_string_pretty(&serde_json::from_str::<serde_json::Value>(json).unwrap())
-            .unwrap();
-    let json = remove_json_colon_spaces(&json);
-    let json = add_json_trailing_commas(&json);
-    json
-}
+use serde_json::Value;
 
-fn remove_json_colon_spaces(json: &str) -> String {
-    let mut out = String::with_capacity(json.len());
-    let mut chars = json.chars().peekable();
-    let mut in_string = false;
-    let mut escaped = false;
-
-    while let Some(c) = chars.next() {
-        if in_string {
-            if escaped {
-                escaped = false;
-            } else if c == '\\' {
-                escaped = true;
-            } else if c == '"' {
-                in_string = false;
-            }
-            out.push(c);
-        } else {
-            if c == '"' {
-                in_string = true;
-                out.push(c);
-            } else if c == ':' && chars.peek() == Some(&' ') {
-                out.push(':');
-                chars.next(); // Skip the space after the colon.
-            } else {
-                out.push(c);
-            }
-        }
-    }
-
+pub fn format_gamemaker_json(value: &Value) -> String {
+    let mut out = String::new();
+    format_value(value, &mut out, 0, false);
+    out.push('\n');
     out
 }
 
-pub fn add_json_trailing_commas(json: &str) -> String {
-    let mut out = String::with_capacity(json.len() + json.len() / 16);
+fn format_value(value: &Value, out: &mut String, indent: usize, inline: bool) {
+    match value {
+        Value::Null => out.push_str("null"),
 
-    let mut in_string = false;
-    let mut escaped = false;
+        Value::Bool(v) => out.push_str(if *v { "true" } else { "false" }),
 
-    for c in json.chars() {
-        if in_string {
-            out.push(c);
+        Value::Number(v) => out.push_str(&v.to_string()),
 
-            if escaped {
-                escaped = false;
-            } else if c == '\\' {
-                escaped = true;
-            } else if c == '"' {
-                in_string = false;
-            }
-
-            continue;
+        Value::String(v) => {
+            out.push('"');
+            out.push_str(&v.replace('"', "\\\""));
+            out.push('"');
         }
 
-        match c {
-            '"' => {
-                in_string = true;
-                out.push(c);
+        Value::Array(arr) => {
+            if arr.is_empty() {
+                out.push_str("[]");
+                return;
             }
 
-            '}' | ']' => {
-                // Insert a comma before any trailing whitespace.
-                let end = out.trim_end_matches(char::is_whitespace).len();
+            out.push('[');
 
-                if end > 0 {
-                    let prev = out.as_bytes()[end - 1];
-
-                    if prev != b'{' && prev != b'[' && prev != b',' {
-                        out.insert(end, ',');
+            if inline {
+                for (i, item) in arr.iter().enumerate() {
+                    if i != 0 {
+                        out.push(',');
                     }
+
+                    format_value(item, out, indent + 1, true);
+                    out.push(',');
                 }
 
-                out.push(c);
+                out.push(']');
+                return;
             }
 
-            _ => out.push(c),
+            out.push('\n');
+
+            for (_i, item) in arr.iter().enumerate() {
+                write_indent(out, indent + 1);
+
+                // Objects inside arrays are GameMaker style inline
+                let compact = matches!(item, Value::Object(_));
+
+                format_value(item, out, indent + 1, compact);
+
+                out.push(',');
+
+                out.push('\n');
+            }
+
+            write_indent(out, indent);
+            out.push(']');
+        }
+
+        Value::Object(map) => {
+            if inline {
+                out.push('{');
+
+                for (i, (key, value)) in map.iter().enumerate() {
+                    if i != 0 {
+                        out.push(',');
+                    }
+
+                    write_string(out, key);
+                    out.push(':');
+
+                    format_value(value, out, indent + 1, false);
+                }
+
+                if !map.is_empty() {
+                    out.push(',');
+                }
+
+                out.push('}');
+                return;
+            }
+
+            if map.is_empty() {
+                out.push_str("{}");
+                return;
+            }
+
+            out.push('{');
+            out.push('\n');
+
+            for (key, value) in map.iter() {
+                write_indent(out, indent + 1);
+
+                write_string(out, key);
+                out.push(':');
+
+                format_value(value, out, indent + 1, false);
+
+                out.push(',');
+                out.push('\n');
+            }
+
+            write_indent(out, indent);
+            out.push('}');
         }
     }
+}
 
-    out
+fn write_indent(out: &mut String, indent: usize) {
+    for _ in 0..indent {
+        out.push_str("  ");
+    }
+}
+
+fn write_string(out: &mut String, s: &str) {
+    out.push('"');
+    out.push_str(&s.replace('"', "\\\""));
+    out.push('"');
 }

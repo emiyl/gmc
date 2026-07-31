@@ -24,7 +24,7 @@ pub struct Instance {
     pub ignore: bool,
 
     #[serde(rename = "imageIndex")]
-    pub image_index: f64,
+    pub image_index: i32,
 
     #[serde(rename = "imageSpeed")]
     pub image_speed: f64,
@@ -79,7 +79,7 @@ impl Default for Instance {
             has_creation_code: false,
             ignore: false,
 
-            image_index: 0.0,
+            image_index: 0,
             image_speed: 1.0,
 
             inherit_code: false,
