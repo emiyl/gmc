@@ -64,7 +64,7 @@ impl Default for GmProjectYyp {
             percent_name: "BLANK GAME".to_string(),
             audio_groups: vec![AudioGroups::default()],
             configs: Configs::default(),
-            default_script_type: 1,
+            default_script_type: 0,
             folders: Vec::new(),
             forced_prefab_project_references: Vec::new(),
             included_files: Vec::new(),
@@ -103,7 +103,9 @@ impl GmProjectYyp {
         self.resources.push(resource);
 
         if resource_type == ResourceType::Room {
-            let room_order_node = RoomOrderNode { id: resource_id };
+            let room_order_node = RoomOrderNode {
+                room_id: resource_id,
+            };
             self.room_order_nodes.push(room_order_node);
         }
     }
@@ -189,7 +191,8 @@ pub struct Resource {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RoomOrderNode {
-    pub id: ResourceId,
+    #[serde(rename = "roomId")]
+    pub room_id: ResourceId,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

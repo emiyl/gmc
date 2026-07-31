@@ -47,6 +47,13 @@ enum Commands {
         resource_type: String,
         resource_name: String,
     },
+    AddObjectToRoom {
+        project_path: PathBuf,
+        room_name: String,
+        object_name: String,
+        x: Option<f64>,
+        y: Option<f64>,
+    },
 }
 
 pub struct Program {
@@ -150,6 +157,31 @@ fn main() {
             };
 
             project.add_resource(resource_type_enum, &resource_name);
+            project.save(&project_path).expect("Failed to save project");
+        }
+        Commands::AddObjectToRoom {
+            project_path,
+            room_name,
+            object_name,
+            x,
+            y,
+        } => {
+            let mut project = match project::GmProject::load(&project_path) {
+                Ok(proj) => proj,
+                Err(e) => {
+                    eprintln!("Failed to load project: {}", e);
+                    return;
+                }
+            };
+
+            let x = x.unwrap_or(0.0);
+            let y = y.unwrap_or(0.0);
+
+            if let Err(e) = project.add_object_to_room(&room_name, &object_name, x, y) {
+                eprintln!("Failed to add object to room: {}", e);
+                return;
+            }
+
             project.save(&project_path).expect("Failed to save project");
         }
     }

@@ -1,3 +1,4 @@
+mod formatter;
 mod gm_project;
 mod options;
 mod resource_order;
@@ -189,7 +190,7 @@ impl GmProject {
     fn add_room(&mut self, name: &str) {
         let parent = ResourceRef {
             name: self.yyp.name.clone(),
-            path: format!("{}.ypp", self.yyp.name),
+            path: format!("{}.yyp", self.yyp.name),
         };
         self.yyp.add_resource(
             ResourceType::Room,
@@ -203,7 +204,7 @@ impl GmProject {
     fn add_object(&mut self, name: &str) {
         let parent = ResourceRef {
             name: self.yyp.name.clone(),
-            path: format!("{}.ypp", self.yyp.name),
+            path: format!("{}.yyp", self.yyp.name),
         };
         self.yyp.add_resource(
             ResourceType::Object,
@@ -214,5 +215,38 @@ impl GmProject {
             .add_resource(name.to_string(), ResourceType::Object);
         let object = GmObject::new(name, parent);
         self.objects.push(object);
+    }
+
+    pub fn add_object_to_room(
+        &mut self,
+        room_name: &str,
+        object_name: &str,
+        x: f64,
+        y: f64,
+    ) -> std::io::Result<()> {
+        // Find the room by name
+        if let Some(room) = self.rooms.iter_mut().find(|r| r.name == room_name) {
+            // Check if object exists in the project
+            if !self.objects.iter().any(|o| o.name == object_name) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("Object '{}' not found in project", object_name),
+                ));
+            }
+
+            // Add the object to the room's instances
+            let object_ref = ResourceRef {
+                name: object_name.to_string(),
+                path: format!("objects/{}/{}.yy", object_name, object_name),
+            };
+
+            room.add_instance(object_ref, x, y);
+            Ok(())
+        } else {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("Room '{}' not found", room_name),
+            ))
+        }
     }
 }

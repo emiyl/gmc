@@ -9,6 +9,11 @@ use serde_json::Value;
 use std::fs;
 use std::path::Path;
 
+use crate::project::{
+    formatter::format_json,
+    resources::gm_room_layer::{Instance, Layer},
+};
+
 use super::{Resource, ResourceRef};
 
 // ---------------------------------------------------------------------
@@ -36,7 +41,7 @@ pub struct GmRoom {
     pub inherit_layers: bool,
 
     #[serde(rename = "instanceCreationOrder")]
-    pub instance_creation_order: Vec<Value>,
+    pub instance_creation_order: Vec<ResourceRef>,
 
     #[serde(rename = "isDnd")]
     pub is_dnd: bool,
@@ -65,10 +70,10 @@ pub struct GmRoom {
     #[serde(rename = "sequenceId")]
     pub sequence_id: Option<Value>,
 
-    pub views: Vec<View>,
-
     #[serde(rename = "viewSettings")]
     pub view_settings: ViewSettings,
+
+    pub views: Vec<View>,
 
     pub volume: f64,
 }
@@ -84,7 +89,10 @@ impl Default for GmRoom {
             inherit_layers: false,
             instance_creation_order: Vec::new(),
             is_dnd: false,
-            layers: vec![Layer::instances_default(), Layer::background_default()],
+            layers: vec![
+                Layer::instance_layer("Instances", 0),
+                Layer::background_layer("Background", 100),
+            ],
             name: "Room1".to_string(),
             parent: ResourceRef {
                 name: "BLANK GAME".to_string(),
@@ -126,14 +134,35 @@ impl GmRoom {
         }
     }
 
+    pub fn add_instance(&mut self, object_ref: ResourceRef, x: f64, y: f64) {
+        let instance = Instance::new(object_ref, x, y);
+        if let Some(Layer::Instance(instance_layer)) = self.layers.iter_mut().find(|layer| {
+            if let Layer::Instance(instance_layer) = layer {
+                instance_layer.display_name == "Instances"
+            } else {
+                false
+            }
+        }) {
+            let instance_ref = ResourceRef {
+                name: instance.name.clone(),
+                path: format!("rooms/{}/{}.yy", self.name, self.name),
+            };
+            instance_layer.add_instance(instance);
+            self.instance_creation_order.push(instance_ref);
+        } else {
+            eprintln!("No instance layer found to add the instance.");
+        }
+    }
+
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, YyError> {
         let contents = fs::read_to_string(path)?;
         parse_str(&contents)
     }
 
     pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), YyError> {
-        let json = to_pretty_string(self)?;
-        fs::write(path, json)?;
+        let json = serde_json::to_string(self)?;
+        let formatted = format_json(&json);
+        fs::write(path, formatted)?;
         Ok(())
     }
 }
@@ -144,8 +173,6 @@ impl GmRoom {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PhysicsSettings {
-    #[serde(rename = "inheritPhysicsSettings")]
-    pub inherit_physics_settings: bool,
     #[serde(rename = "PhysicsWorld")]
     pub physics_world: bool,
     #[serde(rename = "PhysicsWorldGravityX")]
@@ -154,16 +181,18 @@ pub struct PhysicsSettings {
     pub physics_world_gravity_y: f64,
     #[serde(rename = "PhysicsWorldPixToMetres")]
     pub physics_world_pix_to_metres: f64,
+    #[serde(rename = "inheritPhysicsSettings")]
+    pub inherit_physics_settings: bool,
 }
 
 impl Default for PhysicsSettings {
     fn default() -> Self {
         PhysicsSettings {
-            inherit_physics_settings: false,
             physics_world: false,
             physics_world_gravity_x: 0.0,
             physics_world_gravity_y: 10.0,
             physics_world_pix_to_metres: 0.1,
+            inherit_physics_settings: false,
         }
     }
 }
@@ -172,20 +201,20 @@ impl Default for PhysicsSettings {
 pub struct RoomSettings {
     #[serde(rename = "Height")]
     pub height: i64,
+    #[serde(rename = "Width")]
+    pub width: i64,
     #[serde(rename = "inheritRoomSettings")]
     pub inherit_room_settings: bool,
     pub persistent: bool,
-    #[serde(rename = "Width")]
-    pub width: i64,
 }
 
 impl Default for RoomSettings {
     fn default() -> Self {
         RoomSettings {
             height: 768,
+            width: 1366,
             inherit_room_settings: false,
             persistent: false,
-            width: 1366,
         }
     }
 }
@@ -251,182 +280,6 @@ impl Default for View {
             xview: 0,
             yport: 0,
             yview: 0,
-        }
-    }
-}
-
-// ---------------------------------------------------------------------
-// Layers: an "Instances" layer and a "Background" layer share a common
-// set of fields; each also carries its own marker key and extra fields.
-// Modelled as an internally-tagged enum keyed on "resourceType" so a
-// Vec<Layer> round-trips both kinds (and any nested sub-layers).
-// ---------------------------------------------------------------------
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "resourceType")]
-pub enum Layer {
-    #[serde(rename = "GMRInstanceLayer")]
-    Instance(InstanceLayer),
-    #[serde(rename = "GMRBackgroundLayer")]
-    Background(BackgroundLayer),
-}
-
-impl Layer {
-    pub fn instances_default() -> Self {
-        Layer::Instance(InstanceLayer::default())
-    }
-
-    pub fn background_default() -> Self {
-        Layer::Background(BackgroundLayer::default())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct InstanceLayer {
-    #[serde(rename = "$GMRInstanceLayer")]
-    pub gm_instance_layer: String,
-    #[serde(rename = "%Name")]
-    pub percent_name: String,
-    pub depth: i64,
-    #[serde(rename = "effectEnabled")]
-    pub effect_enabled: bool,
-    #[serde(rename = "effectType")]
-    pub effect_type: Option<Value>,
-    #[serde(rename = "gridX")]
-    pub grid_x: i64,
-    #[serde(rename = "gridY")]
-    pub grid_y: i64,
-    #[serde(rename = "hierarchyFrozen")]
-    pub hierarchy_frozen: bool,
-    #[serde(rename = "inheritLayerDepth")]
-    pub inherit_layer_depth: bool,
-    #[serde(rename = "inheritLayerSettings")]
-    pub inherit_layer_settings: bool,
-    #[serde(rename = "inheritSubLayers")]
-    pub inherit_sub_layers: bool,
-    #[serde(rename = "inheritVisibility")]
-    pub inherit_visibility: bool,
-    pub instances: Vec<Value>,
-    pub layers: Vec<Layer>,
-    pub name: String,
-    pub properties: Vec<Value>,
-    #[serde(rename = "resourceVersion")]
-    pub resource_version: String,
-    #[serde(rename = "userdefinedDepth")]
-    pub userdefined_depth: bool,
-    pub visible: bool,
-}
-
-impl Default for InstanceLayer {
-    fn default() -> Self {
-        InstanceLayer {
-            gm_instance_layer: String::new(),
-            percent_name: "Instances".to_string(),
-            depth: 0,
-            effect_enabled: true,
-            effect_type: None,
-            grid_x: 32,
-            grid_y: 32,
-            hierarchy_frozen: false,
-            inherit_layer_depth: false,
-            inherit_layer_settings: false,
-            inherit_sub_layers: true,
-            inherit_visibility: true,
-            instances: Vec::new(),
-            layers: Vec::new(),
-            name: "Instances".to_string(),
-            properties: Vec::new(),
-            resource_version: "2.0".to_string(),
-            userdefined_depth: false,
-            visible: true,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct BackgroundLayer {
-    #[serde(rename = "$GMRBackgroundLayer")]
-    pub gm_background_layer: String,
-    #[serde(rename = "%Name")]
-    pub percent_name: String,
-    #[serde(rename = "animationFPS")]
-    pub animation_fps: f64,
-    #[serde(rename = "animationSpeedType")]
-    pub animation_speed_type: i64,
-    pub colour: i64,
-    pub depth: i64,
-    #[serde(rename = "effectEnabled")]
-    pub effect_enabled: bool,
-    #[serde(rename = "effectType")]
-    pub effect_type: Option<Value>,
-    #[serde(rename = "gridX")]
-    pub grid_x: i64,
-    #[serde(rename = "gridY")]
-    pub grid_y: i64,
-    #[serde(rename = "hierarchyFrozen")]
-    pub hierarchy_frozen: bool,
-    pub hspeed: f64,
-    pub htiled: bool,
-    #[serde(rename = "inheritLayerDepth")]
-    pub inherit_layer_depth: bool,
-    #[serde(rename = "inheritLayerSettings")]
-    pub inherit_layer_settings: bool,
-    #[serde(rename = "inheritSubLayers")]
-    pub inherit_sub_layers: bool,
-    #[serde(rename = "inheritVisibility")]
-    pub inherit_visibility: bool,
-    pub layers: Vec<Layer>,
-    pub name: String,
-    pub properties: Vec<Value>,
-    #[serde(rename = "resourceVersion")]
-    pub resource_version: String,
-    #[serde(rename = "spriteId")]
-    pub sprite_id: Option<Value>,
-    pub stretch: bool,
-    #[serde(rename = "userdefinedAnimFPS")]
-    pub userdefined_anim_fps: bool,
-    #[serde(rename = "userdefinedDepth")]
-    pub userdefined_depth: bool,
-    pub visible: bool,
-    pub vspeed: f64,
-    pub vtiled: bool,
-    pub x: i64,
-    pub y: i64,
-}
-
-impl Default for BackgroundLayer {
-    fn default() -> Self {
-        BackgroundLayer {
-            gm_background_layer: String::new(),
-            percent_name: "Background".to_string(),
-            animation_fps: 15.0,
-            animation_speed_type: 0,
-            colour: 4278190080,
-            depth: 100,
-            effect_enabled: true,
-            effect_type: None,
-            grid_x: 32,
-            grid_y: 32,
-            hierarchy_frozen: false,
-            hspeed: 0.0,
-            htiled: false,
-            inherit_layer_depth: false,
-            inherit_layer_settings: false,
-            inherit_sub_layers: true,
-            inherit_visibility: true,
-            layers: Vec::new(),
-            name: "Background".to_string(),
-            properties: Vec::new(),
-            resource_version: "2.0".to_string(),
-            sprite_id: None,
-            stretch: false,
-            userdefined_anim_fps: false,
-            userdefined_depth: false,
-            visible: true,
-            vspeed: 0.0,
-            vtiled: false,
-            x: 0,
-            y: 0,
         }
     }
 }
@@ -526,24 +379,4 @@ pub fn parse_str(contents: &str) -> Result<GmRoom, YyError> {
     let cleaned = strip_trailing_commas(contents);
     let room: GmRoom = serde_json::from_str(&cleaned)?;
     Ok(room)
-}
-
-/// Reads and parses a `.yy` room file from disk.
-pub fn parse_file<P: AsRef<Path>>(path: P) -> Result<GmRoom, YyError> {
-    let contents = fs::read_to_string(path)?;
-    parse_str(&contents)
-}
-
-/// Serializes a room back to pretty-printed, strict JSON (no trailing
-/// commas). GameMaker's IDE accepts standard JSON on import, so this is
-/// safe to write straight back to a `.yy` file.
-pub fn to_pretty_string(room: &GmRoom) -> Result<String, serde_json::Error> {
-    serde_json::to_string_pretty(room)
-}
-
-/// Serializes and writes a room to a `.yy` file on disk.
-pub fn write_file<P: AsRef<Path>>(path: P, room: &GmRoom) -> Result<(), YyError> {
-    let json = to_pretty_string(room)?;
-    fs::write(path, json)?;
-    Ok(())
 }

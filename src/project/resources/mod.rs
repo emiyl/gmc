@@ -1,5 +1,6 @@
 mod gm_object;
 mod gm_room;
+mod gm_room_layer;
 
 pub use gm_object::GmObject;
 pub use gm_room::GmRoom;
