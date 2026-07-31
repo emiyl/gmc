@@ -2,10 +2,10 @@ use std::collections::HashMap;
 
 use super::WadLayout;
 use crate::{
-    compiler::compiler::Compiler,
-    compiler::lexer::Lexer,
-    compiler::parser::Parser,
-    compiler::resolver::Resolver,
+    compiler::{
+        compiler::Compiler, disassembler::print_disassembly, lexer::Lexer, parser::Parser,
+        resolver::Resolver,
+    },
     data_win::{ChunkBuilder, Patch, StringPool},
     project::{CodeEntry, CodeOwner, EventSubType, EventType},
 };
@@ -46,6 +46,8 @@ impl CompiledCodeEntry {
 
         let mut resolver = Resolver::new();
         let program = resolver.resolve(compiler.instructions);
+
+        print_disassembly(&program.bytecode);
 
         functions.extend(resolver.functions.keys().cloned());
         variables.extend(resolver.variables.keys().cloned());
