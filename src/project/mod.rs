@@ -12,6 +12,7 @@ pub use resources::{
 };
 
 pub use crate::project::resources::CodeOwner;
+use crate::project::resources::event_type;
 
 #[derive(Debug, Clone)]
 pub struct GmProject {
@@ -98,6 +99,35 @@ impl GmProject {
         }
 
         let code_vec = &self.code;
+        if !code_vec.is_empty() {
+            for code_entry in code_vec {
+                let code_owner_dir = match &code_entry.owner {
+                    CodeOwner::ObjectEvent {
+                        object,
+                        event_type,
+                        event_num,
+                    } => {
+                        let object_dir = objects_dir.join(object);
+                        if !object_dir.exists() {
+                            std::fs::create_dir_all(&object_dir)?;
+                        }
+                        object_dir.join(format!(
+                            "{}_{}.gml",
+                            event_type.as_str(),
+                            event_num.value()
+                        ))
+                    }
+                    CodeOwner::Script { name: _ } => parent_dir.join("scripts"),
+                };
+                if !code_owner_dir.exists() {
+                    std::fs::create_dir_all(&code_owner_dir)?;
+                }
+                let code_file_path = code_owner_dir.join(format!("{}.gml", code_entry.name));
+                code_entry
+                    .save(&code_file_path)
+                    .expect("Failed to save code entry");
+            }
+        }
 
         Ok(())
     }
@@ -185,12 +215,6 @@ impl GmProject {
                     let path = entry.path();
 
                     if path.is_file() && path.extension().map_or(false, |ext| ext == "gml") {
-                        let code_name = path
-                            .file_stem()
-                            .expect("Failed to get code file name")
-                            .to_string_lossy();
-                        let code =
-                            std::fs::read_to_string(&path).expect("Failed to read code file");
                         let code_entry = CodeEntry::load(&path).expect("Failed to load code entry");
                         code_vec.push(code_entry);
                     }
@@ -279,5 +303,40 @@ impl GmProject {
                 format!("Room '{}' not found", room_name),
             ))
         }
+    }
+
+    pub fn add_event_to_object(
+        &mut self,
+        project_path: &std::path::PathBuf,
+        object_name: &str,
+        event_type: EventType,
+        event_subtype: EventSubType,
+        code: Option<String>,
+    ) -> std::io::Result<()> {
+        // Find the object by name
+        if let Some(object) = self.objects.iter_mut().find(|o| o.name == object_name) {
+            // Add the event to the object's events
+            object.add_event(event_type, event_subtype.clone());
+        } else {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("Object '{}' not found", object_name),
+            ));
+        }
+
+        // Write code to file or create file
+        let event_type_str = event_type.as_str();
+        let event_num = event_subtype.value();
+        let code_file_path = format!(
+            "objects/{}/{}_{}.gml",
+            object_name, event_type_str, event_num
+        );
+        let full_path = project_path.parent().unwrap().join(&code_file_path);
+        std::fs::File::create(&full_path)?;
+        if let Some(code) = code {
+            std::fs::write(&full_path, code)?;
+        }
+
+        Ok(())
     }
 }

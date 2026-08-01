@@ -212,6 +212,16 @@ impl GmObject {
         fs::write(path, json)?;
         Ok(())
     }
+
+    pub fn add_event(&mut self, event_type: EventType, event_subtype: EventSubType) {
+        let event = Event {
+            event_type: event_type as i32,
+            event_num: event_subtype.value(),
+            name: format!("{}_{}", event_type.as_str(), event_subtype.value()),
+            ..Default::default()
+        };
+        self.event_list.push(event);
+    }
 }
 
 impl Resource for GmObject {

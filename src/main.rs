@@ -7,6 +7,7 @@ use env_logger::Builder;
 use log::LevelFilter;
 use std::io::Write;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 #[derive(ClapParser)]
 #[command(name = "gmlc")]
@@ -31,6 +32,13 @@ enum Commands {
         project_path: PathBuf,
         resource_type: String,
         resource_name: String,
+    },
+    AddEvent {
+        project_path: PathBuf,
+        object_name: String,
+        event_type: String,
+        event_subtype: Option<String>,
+        code: Option<String>,
     },
     AddObjectToRoom {
         project_path: PathBuf,
@@ -143,6 +151,46 @@ fn main() {
 
             if let Err(e) = project.add_object_to_room(&room_name, &object_name, x, y) {
                 eprintln!("Failed to add object to room: {}", e);
+                return;
+            }
+
+            project.save(&project_path).expect("Failed to save project");
+        }
+        Commands::AddEvent {
+            project_path,
+            object_name,
+            event_type,
+            event_subtype,
+            code,
+        } => {
+            let mut project = match project::GmProject::load(&project_path) {
+                Ok(proj) => proj,
+                Err(e) => {
+                    eprintln!("Failed to load project: {}", e);
+                    return;
+                }
+            };
+
+            let event_type = match project::EventType::from_str(&event_type) {
+                Ok(et) => et,
+                Err(_) => {
+                    eprintln!("Invalid event type: {}", event_type);
+                    return;
+                }
+            };
+
+            let event_subtype_i32 = event_subtype.unwrap().parse::<i32>().ok();
+            let event_subtype =
+                project::EventSubType::from_i32(event_type, event_subtype_i32.unwrap_or(0));
+
+            if let Err(e) = project.add_event_to_object(
+                &project_path,
+                &object_name,
+                event_type,
+                event_subtype,
+                code,
+            ) {
+                eprintln!("Failed to add event to object: {}", e);
                 return;
             }
 
