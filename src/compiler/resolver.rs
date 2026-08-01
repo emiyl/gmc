@@ -72,6 +72,13 @@ impl Resolver {
             .map(|instruction| match instruction {
                 Instruction::Push(var) => {
                     let variable = self.get_variable(&var.name);
+                    let var_kind = var.var_ref & 0xF8000000;
+                    let var_ref = var_kind | (variable.var_ref & 0x07FFFFFF);
+
+                    let variable = Variable {
+                        name: variable.name,
+                        var_ref,
+                    };
 
                     Instruction::Push(variable)
                 }
@@ -82,6 +89,13 @@ impl Resolver {
                     src_type,
                 } => {
                     let variable = self.get_variable(&var.name);
+                    let var_kind = var.var_ref & 0xF8000000;
+                    let var_ref = var_kind | (variable.var_ref & 0x07FFFFFF);
+
+                    let variable = Variable {
+                        name: variable.name,
+                        var_ref,
+                    };
 
                     Instruction::Pop {
                         variable,

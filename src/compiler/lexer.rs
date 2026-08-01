@@ -37,6 +37,10 @@ pub enum Token {
     Question,
     Semicolon,
 
+    LeftBracket,
+    RightBracket,
+    Dot,
+
     LeftParen,
     RightParen,
     LeftBrace,
@@ -174,6 +178,9 @@ impl Lexer {
             '?' => Token::Question,
             '!' => Token::Exclamation,
             ';' => Token::Semicolon,
+            '[' => Token::LeftBracket,
+            ']' => Token::RightBracket,
+            '.' => Token::Dot,
             '(' => Token::LeftParen,
             ')' => Token::RightParen,
             ',' => Token::Comma,

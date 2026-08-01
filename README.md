@@ -30,20 +30,13 @@ This will create a project with a room and an object, add the object to the room
 - [x] `return`
 
 ## Data types
-- [ ] Arrays
-- [ ] Structs
-- [ ] Array indexing (`a[i]`)
-- [ ] Nested arrays
-- [ ] Struct member access (`obj.x`)
-- [ ] Chained access (`a.b.c`)
-- [ ] Array/struct literals
-
-## Variables
-- [x] Local variables
-- [ ] Global variables
-- [ ] Instance variables
-- [ ] Static variables
-- [ ] Variable declarations (`var`, `globalvar`, `static`)
+- [x] Arrays
+- [x] Structs
+- [x] Array indexing (`a[i]`)
+- [x] Nested arrays
+- [x] Struct member access (`obj.x`)
+- [x] Chained access (`a.b.c`)
+- [x] Array/struct literals
 
 ## Operators
 - [x] Compound assignments (`+=`, `-=`, `*=`, etc.)
@@ -53,6 +46,13 @@ This will create a project with a room and an object, add the object to the room
 - [x] Comparison operators
 - [x] Modulo
 - [x] Shift operators (`<<`, `>>`)
+
+## Variables
+- [x] Local variables
+- [ ] Global variables
+- [ ] Instance variables
+- [ ] Static variables
+- [ ] Variable declarations (`var`, `globalvar`, `static`)
 
 ## Functions
 - [ ] Function declarations

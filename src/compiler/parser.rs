@@ -2,6 +2,18 @@ use super::ast::*;
 use super::lexer::Token::Identifier;
 use super::lexer::{Lexer, Token};
 
+#[derive(Debug, Clone)]
+enum AccessSegment {
+    Index(Expr),
+    Member(String),
+}
+
+#[derive(Debug, Clone)]
+struct AccessTarget {
+    base: Expr,
+    segments: Vec<AccessSegment>,
+}
+
 #[derive(Debug)]
 pub struct Parser {
     lexer: Lexer,
@@ -227,6 +239,286 @@ impl Parser {
         statements
     }
 
+    fn build_call(&self, name: &str, args: Vec<Expr>) -> Expr {
+        Expr::Call {
+            name: name.to_string(),
+            args,
+        }
+    }
+
+    fn parse_access_target_from_identifier(&mut self, name: String) -> AccessTarget {
+        self.advance(); // consume identifier
+
+        let mut target = AccessTarget {
+            base: Expr::Variable(name),
+            segments: Vec::new(),
+        };
+
+        loop {
+            match self.current {
+                Token::LeftBracket => {
+                    self.advance(); // consume '['
+                    let index = self.parse_expression();
+                    self.expect(Token::RightBracket);
+                    target.segments.push(AccessSegment::Index(index));
+                }
+                Token::Dot => {
+                    self.advance(); // consume '.'
+
+                    let Token::Identifier(field) = &self.current else {
+                        panic!("Expected identifier after '.'");
+                    };
+                    let field = field.clone();
+                    self.advance();
+                    target.segments.push(AccessSegment::Member(field));
+                }
+                _ => break,
+            }
+        }
+
+        target
+    }
+
+    fn build_access_read_expr(&self, target: &AccessTarget) -> Expr {
+        let mut expr = target.base.clone();
+
+        for segment in &target.segments {
+            expr = match segment {
+                AccessSegment::Index(index) => {
+                    self.build_call("array_get", vec![expr, index.clone()])
+                }
+                AccessSegment::Member(name) => self.build_call(
+                    "variable_struct_get",
+                    vec![expr, Expr::String(name.clone())],
+                ),
+            };
+        }
+
+        expr
+    }
+
+    fn build_access_write_expr(
+        &self,
+        target: &AccessTarget,
+        value: Expr,
+        compound_operator: Option<BinaryOp>,
+    ) -> Expr {
+        let mut expr = if let Some(operator) = compound_operator {
+            Expr::Binary {
+                left: Box::new(self.build_access_read_expr(target)),
+                operator,
+                right: Box::new(value),
+            }
+        } else {
+            value
+        };
+
+        for segment_index in (0..target.segments.len()).rev() {
+            let segment = &target.segments[segment_index];
+            let container_expr = if segment_index == 0 {
+                target.base.clone()
+            } else {
+                let prefix = AccessTarget {
+                    base: target.base.clone(),
+                    segments: target.segments[..segment_index].to_vec(),
+                };
+                self.build_access_read_expr(&prefix)
+            };
+
+            expr = match segment {
+                AccessSegment::Index(index) => {
+                    self.build_call("array_set", vec![container_expr, index.clone(), expr])
+                }
+                AccessSegment::Member(name) => self.build_call(
+                    "variable_struct_set",
+                    vec![container_expr, Expr::String(name.clone()), expr],
+                ),
+            };
+        }
+
+        expr
+    }
+
+    fn parse_array_literal(&mut self) -> Expr {
+        self.expect(Token::LeftBracket);
+
+        let mut values = Vec::new();
+        if self.current != Token::RightBracket {
+            loop {
+                values.push(self.parse_expression());
+
+                if self.current == Token::Comma {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        self.expect(Token::RightBracket);
+
+        let mut expr = self.build_call(
+            "array_create",
+            vec![Expr::Integer(values.len() as i32), Expr::Integer(0)],
+        );
+
+        for (index, value) in values.into_iter().enumerate() {
+            expr = self.build_call("array_set", vec![expr, Expr::Integer(index as i32), value]);
+        }
+
+        expr
+    }
+
+    fn parse_postfix(&mut self, mut expr: Expr) -> Expr {
+        loop {
+            match self.current {
+                Token::LeftBracket => {
+                    self.advance();
+                    let index = self.parse_expression();
+                    self.expect(Token::RightBracket);
+                    expr = self.build_call("array_get", vec![expr, index]);
+                }
+                Token::Dot => {
+                    self.advance();
+                    let Token::Identifier(field) = &self.current else {
+                        panic!("Expected identifier after '.'");
+                    };
+                    let field = field.clone();
+                    self.advance();
+                    expr = self.build_call("variable_struct_get", vec![expr, Expr::String(field)]);
+                }
+                _ => break,
+            }
+        }
+
+        expr
+    }
+
+    fn parse_access_statement_from_identifier(
+        &mut self,
+        name: String,
+        needs_semicolon: bool,
+    ) -> Statement {
+        let target = self.parse_access_target_from_identifier(name);
+
+        let statement = match self.current {
+            Token::Equals => {
+                self.advance();
+                let value = self.parse_expression();
+                Statement::Expression(self.build_access_write_expr(&target, value, None))
+            }
+            Token::PlusEquals => {
+                self.advance();
+                let right = self.parse_expression();
+                Statement::Expression(self.build_access_write_expr(
+                    &target,
+                    right,
+                    Some(BinaryOp::Add),
+                ))
+            }
+            Token::MinusEquals => {
+                self.advance();
+                let right = self.parse_expression();
+                Statement::Expression(self.build_access_write_expr(
+                    &target,
+                    right,
+                    Some(BinaryOp::Sub),
+                ))
+            }
+            Token::AsteriskEquals => {
+                self.advance();
+                let right = self.parse_expression();
+                Statement::Expression(self.build_access_write_expr(
+                    &target,
+                    right,
+                    Some(BinaryOp::Mul),
+                ))
+            }
+            Token::SlashEquals => {
+                self.advance();
+                let right = self.parse_expression();
+                Statement::Expression(self.build_access_write_expr(
+                    &target,
+                    right,
+                    Some(BinaryOp::Div),
+                ))
+            }
+            Token::PercentEquals => {
+                self.advance();
+                let right = self.parse_expression();
+                Statement::Expression(self.build_access_write_expr(
+                    &target,
+                    right,
+                    Some(BinaryOp::Rem),
+                ))
+            }
+            Token::AmpersandEquals => {
+                self.advance();
+                let right = self.parse_expression();
+                Statement::Expression(self.build_access_write_expr(
+                    &target,
+                    right,
+                    Some(BinaryOp::And),
+                ))
+            }
+            Token::VerticalBarEquals => {
+                self.advance();
+                let right = self.parse_expression();
+                Statement::Expression(self.build_access_write_expr(
+                    &target,
+                    right,
+                    Some(BinaryOp::Or),
+                ))
+            }
+            Token::CaretEquals => {
+                self.advance();
+                let right = self.parse_expression();
+                Statement::Expression(self.build_access_write_expr(
+                    &target,
+                    right,
+                    Some(BinaryOp::Xor),
+                ))
+            }
+            Token::ShiftLeftEquals => {
+                self.advance();
+                let right = self.parse_expression();
+                Statement::Expression(self.build_access_write_expr(
+                    &target,
+                    right,
+                    Some(BinaryOp::Shl),
+                ))
+            }
+            Token::ShiftRightEquals => {
+                self.advance();
+                let right = self.parse_expression();
+                Statement::Expression(self.build_access_write_expr(
+                    &target,
+                    right,
+                    Some(BinaryOp::Shr),
+                ))
+            }
+            Token::Semicolon => {
+                if needs_semicolon {
+                    self.expect(Token::Semicolon);
+                }
+                Statement::Expression(self.build_access_read_expr(&target))
+            }
+            _ => {
+                let expr = self.build_access_read_expr(&target);
+                let expr = self.parse_expression_with_left(expr);
+                if needs_semicolon {
+                    self.expect(Token::Semicolon);
+                }
+                return Statement::Expression(expr);
+            }
+        };
+
+        if needs_semicolon {
+            self.expect(Token::Semicolon);
+        }
+        statement
+    }
+
     fn parse_assignment(&mut self, name: String, needs_semicolon: bool) -> Statement {
         self.advance(); // consume identifier
         self.expect(Token::Equals);
@@ -355,6 +647,9 @@ impl Parser {
                 }
                 Token::PlusPlus => self.parse_increment_statement(name, BinaryOp::Add, false),
                 Token::MinusMinus => self.parse_increment_statement(name, BinaryOp::Sub, false),
+                Token::LeftBracket | Token::Dot => {
+                    self.parse_access_statement_from_identifier(name, false)
+                }
                 _ => {
                     let expr = self.parse_expression();
                     Statement::Expression(expr)
@@ -436,6 +731,9 @@ impl Parser {
                     Token::MinusMinus => {
                         return self.parse_increment_statement(name, BinaryOp::Sub, true);
                     }
+                    Token::LeftBracket | Token::Dot => {
+                        return self.parse_access_statement_from_identifier(name, true);
+                    }
                     Token::LeftParen => {
                         let expr = self.parse_expression();
                         self.expect(Token::Semicolon);
@@ -456,8 +754,11 @@ impl Parser {
     }
 
     fn parse_expression(&mut self) -> Expr {
-        let mut left = self.parse_primary();
+        let left = self.parse_primary();
+        self.parse_expression_with_left(left)
+    }
 
+    fn parse_expression_with_left(&mut self, mut left: Expr) -> Expr {
         loop {
             match &self.current {
                 Token::Asterisk => {
@@ -739,11 +1040,16 @@ impl Parser {
                 }
             }
 
+            Token::LeftBracket => {
+                let expr = self.parse_array_literal();
+                self.parse_postfix(expr)
+            }
+
             Token::Identifier(name) => {
                 let name = name.clone();
                 self.advance();
 
-                if self.current == Token::LeftParen {
+                let expr = if self.current == Token::LeftParen {
                     self.advance(); // consume '('
 
                     let mut args = Vec::new();
@@ -769,7 +1075,16 @@ impl Parser {
                     Expr::Call { name, args }
                 } else {
                     Expr::Variable(name)
-                }
+                };
+
+                self.parse_postfix(expr)
+            }
+
+            Token::LeftParen => {
+                self.advance();
+                let expr = self.parse_expression();
+                self.expect(Token::RightParen);
+                self.parse_postfix(expr)
             }
 
             _ => panic!("Unexpected token {:?}", self.current),

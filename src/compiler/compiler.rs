@@ -156,7 +156,10 @@ impl Compiler {
             panic!("'continue' used outside of loop");
         }
 
-        if let Some(target_index) = self.loop_scopes.last().and_then(|scope| scope.continue_target)
+        if let Some(target_index) = self
+            .loop_scopes
+            .last()
+            .and_then(|scope| scope.continue_target)
         {
             self.emit_jump_to(target_index);
             return;
@@ -174,6 +177,79 @@ impl Compiler {
         let id = self.temp_counter;
         self.temp_counter += 1;
         format!("__gmlc_{}_{}", prefix, id)
+    }
+
+    fn make_array_variable(&self, name: &str, var_ref: u32) -> Variable {
+        Variable {
+            name: name.to_string(),
+            var_ref,
+        }
+    }
+
+    fn emit_stacktop_marker(&mut self) {
+        self.instructions.push(Instruction::PushI(-1));
+    }
+
+    fn collect_array_literal_values(expr: &Expr, values: &mut Vec<Expr>) -> bool {
+        match expr {
+            Expr::Call { name, args } if name == "array_set" && args.len() == 3 => {
+                if Self::collect_array_literal_values(&args[0], values) {
+                    values.push(args[2].clone());
+                    true
+                } else {
+                    false
+                }
+            }
+            Expr::Call { name, args } if name == "array_create" && args.len() == 2 => true,
+            _ => false,
+        }
+    }
+
+    fn compile_array_literal_chain(&mut self, expr: &Expr) -> bool {
+        let mut values = Vec::new();
+        if !Self::collect_array_literal_values(expr, &mut values) {
+            return false;
+        }
+
+        if values.is_empty() {
+            return false;
+        }
+
+        let temp_name = self.next_temp_name("array");
+        let array_write_var = self.make_array_variable(&temp_name, 0);
+        let array_read_var = self.make_array_variable(&temp_name, 0xA000_0000);
+
+        for (index, value) in values.into_iter().enumerate() {
+            self.compile_expression(&value);
+            self.emit_stacktop_marker();
+            self.instructions.push(Instruction::PushI(index as i32));
+            self.instructions.push(Instruction::Pop {
+                variable: array_write_var.clone(),
+                dst_type: ValueType::Var,
+                src_type: value_type_from_expr(&value),
+            });
+        }
+
+        self.instructions.push(Instruction::Push(array_read_var));
+        true
+    }
+
+    fn compile_array_read_call(&mut self, args: &[Expr]) -> bool {
+        let [base, index] = args else {
+            return false;
+        };
+
+        let Expr::Variable(base_name) = base else {
+            return false;
+        };
+
+        self.emit_stacktop_marker();
+        self.compile_expression(index);
+        self.instructions.push(Instruction::Push(Variable {
+            name: base_name.clone(),
+            var_ref: 0,
+        }));
+        true
     }
 
     fn emit_popz(&mut self) {
@@ -210,7 +286,7 @@ impl Compiler {
 
                 let var = Variable {
                     name: name.clone(),
-                    var_ref: 0,
+                    var_ref: 0xA000_0000,
                 };
 
                 self.instructions.push(Instruction::Pop {
@@ -436,7 +512,8 @@ impl Compiler {
             Statement::Return(expr) => {
                 if let Some(expr) = expr {
                     self.compile_expression(expr);
-                    self.instructions.push(Instruction::Ret(value_type_from_expr(expr)));
+                    self.instructions
+                        .push(Instruction::Ret(value_type_from_expr(expr)));
                 } else {
                     self.instructions.push(Instruction::Exit);
                 }
@@ -471,7 +548,7 @@ impl Compiler {
 
         let var = Variable {
             name: name.to_string(),
-            var_ref: 0,
+            var_ref: 0xA000_0000,
         };
 
         self.instructions.push(Instruction::Push(var.clone()));
@@ -503,7 +580,7 @@ impl Compiler {
             Expr::Variable(name) => {
                 let var = Variable {
                     name: name.clone(),
-                    var_ref: 0,
+                    var_ref: 0xA000_0000,
                 };
 
                 self.instructions.push(Instruction::Push(var));
@@ -552,6 +629,14 @@ impl Compiler {
             }
 
             Expr::Call { name, args } => {
+                if name == "array_set" && self.compile_array_literal_chain(expr) {
+                    return;
+                }
+
+                if name == "array_get" && self.compile_array_read_call(args) {
+                    return;
+                }
+
                 for arg in args {
                     self.compile_expression(arg);
                     self.emit_conv_if_needed(value_type_from_expr(arg), ValueType::Var);
