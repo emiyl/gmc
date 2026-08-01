@@ -29,8 +29,13 @@ pub fn compile_code_entry(
 
     print_disassembly(&program.bytecode);
 
-    functions.extend(resolver.functions.keys().cloned());
-    variables.extend(resolver.variables.keys().cloned());
+    let mut resolved_functions = resolver.functions.values().cloned().collect::<Vec<_>>();
+    resolved_functions.sort_by_key(|function| function.var_ref);
+    functions.extend(resolved_functions.into_iter().map(|function| function.name));
+
+    let mut resolved_variables = resolver.variables.values().cloned().collect::<Vec<_>>();
+    resolved_variables.sort_by_key(|variable| variable.var_ref);
+    variables.extend(resolved_variables.into_iter().map(|variable| variable.name));
 
     let owner = match &entry.owner {
         CodeOwner::Script { name } => CompiledCodeOwner::Script { name: name.clone() },
@@ -94,13 +99,32 @@ pub fn compile_object(
     let mut event_lists: [Vec<CompiledEvent>; 15] = Default::default();
     for event in &object.event_list {
         let key = (object.name.clone(), event.event_type, event.event_num);
-        let _code_index = code_lookup.get(&key).copied().unwrap_or(0);
+        let code_index = code_lookup
+            .get(&key)
+            .copied()
+            .map(|index| index as i32)
+            .unwrap_or(-1);
 
         let type_index = event.event_type as usize;
         if type_index < event_lists.len() {
             event_lists[type_index].push(CompiledEvent {
                 event_num: event.event_num,
-                actions: Vec::new(),
+                actions: vec![crate::data_win::model::CompiledEventAction {
+                    lib_id: 1,
+                    id: 603,
+                    kind: 7,
+                    use_relative: false,
+                    is_question: false,
+                    use_apply_to: false,
+                    exe_type: 2,
+                    action_name: String::new(),
+                    code_id: code_index,
+                    argument_count: 0,
+                    who: -1,
+                    relative: false,
+                    is_not: false,
+                    unknown_always_zero: 0,
+                }],
             });
         }
     }
