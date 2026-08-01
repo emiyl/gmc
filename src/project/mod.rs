@@ -100,7 +100,7 @@ impl GmProject {
         let code_vec = &self.code;
         if !code_vec.is_empty() {
             for code_entry in code_vec {
-                let code_owner_dir = match &code_entry.owner {
+                let code_file_path = match &code_entry.owner {
                     CodeOwner::ObjectEvent {
                         object,
                         event_type,
@@ -118,10 +118,10 @@ impl GmProject {
                     }
                     CodeOwner::Script { name: _ } => parent_dir.join("scripts"),
                 };
-                if !code_owner_dir.exists() {
-                    std::fs::create_dir_all(&code_owner_dir)?;
+                if !code_file_path.parent().unwrap().exists() {
+                    std::fs::create_dir_all(code_file_path.parent().unwrap())?;
                 }
-                let code_file_path = code_owner_dir.join(format!("{}.gml", code_entry.name));
+                println!("Saving code entry to: {:?}", code_file_path);
                 code_entry
                     .save(&code_file_path)
                     .expect("Failed to save code entry");
