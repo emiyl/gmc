@@ -3,14 +3,29 @@ pub enum Token {
     Identifier(String),
     Number(i32),
 
+    ShiftLeft,
+    ShiftRight,
+    ShiftLeftEquals,
+    ShiftRightEquals,
+
     Asterisk,
+    AsteriskEquals,
     Slash,
+    SlashEquals,
     Percent,
+    PercentEquals,
     Plus,
+    PlusEquals,
+    PlusPlus,
     Minus,
+    MinusEquals,
+    MinusMinus,
     Ampersand,
+    AmpersandEquals,
     VerticalBar,
+    VerticalBarEquals,
     Caret,
+    CaretEquals,
     Exclamation,
     Tilde,
     LeftAngle,
@@ -57,17 +72,103 @@ impl Lexer {
         let c = self.input[self.position];
 
         let token = match c {
-            '*' => Token::Asterisk,
-            '/' => Token::Slash,
-            '%' => Token::Percent,
-            '+' => Token::Plus,
-            '-' => Token::Minus,
-            '&' => Token::Ampersand,
-            '|' => Token::VerticalBar,
-            '^' => Token::Caret,
+            '*' => {
+                if self.peek_char(1) == Some('=') {
+                    self.position += 1;
+                    Token::AsteriskEquals
+                } else {
+                    Token::Asterisk
+                }
+            }
+            '/' => {
+                if self.peek_char(1) == Some('=') {
+                    self.position += 1;
+                    Token::SlashEquals
+                } else {
+                    Token::Slash
+                }
+            }
+            '%' => {
+                if self.peek_char(1) == Some('=') {
+                    self.position += 1;
+                    Token::PercentEquals
+                } else {
+                    Token::Percent
+                }
+            }
+            '+' => {
+                if self.peek_char(1) == Some('+') {
+                    self.position += 1;
+                    Token::PlusPlus
+                } else if self.peek_char(1) == Some('=') {
+                    self.position += 1;
+                    Token::PlusEquals
+                } else {
+                    Token::Plus
+                }
+            }
+            '-' => {
+                if self.peek_char(1) == Some('-') {
+                    self.position += 1;
+                    Token::MinusMinus
+                } else if self.peek_char(1) == Some('=') {
+                    self.position += 1;
+                    Token::MinusEquals
+                } else {
+                    Token::Minus
+                }
+            }
+            '&' => {
+                if self.peek_char(1) == Some('=') {
+                    self.position += 1;
+                    Token::AmpersandEquals
+                } else {
+                    Token::Ampersand
+                }
+            }
+            '|' => {
+                if self.peek_char(1) == Some('=') {
+                    self.position += 1;
+                    Token::VerticalBarEquals
+                } else {
+                    Token::VerticalBar
+                }
+            }
+            '^' => {
+                if self.peek_char(1) == Some('=') {
+                    self.position += 1;
+                    Token::CaretEquals
+                } else {
+                    Token::Caret
+                }
+            }
             '~' => Token::Tilde,
-            '<' => Token::LeftAngle,
-            '>' => Token::RightAngle,
+            '<' => {
+                if self.peek_char(1) == Some('<') {
+                    if self.peek_char(2) == Some('=') {
+                        self.position += 2;
+                        Token::ShiftLeftEquals
+                    } else {
+                        self.position += 1;
+                        Token::ShiftLeft
+                    }
+                } else {
+                    Token::LeftAngle
+                }
+            }
+            '>' => {
+                if self.peek_char(1) == Some('>') {
+                    if self.peek_char(2) == Some('=') {
+                        self.position += 2;
+                        Token::ShiftRightEquals
+                    } else {
+                        self.position += 1;
+                        Token::ShiftRight
+                    }
+                } else {
+                    Token::RightAngle
+                }
+            }
             '=' => Token::Equals,
             '!' => Token::Exclamation,
             ';' => Token::Semicolon,
@@ -113,5 +214,9 @@ impl Lexer {
         let text: String = self.input[start..self.position].iter().collect();
 
         Token::Identifier(text)
+    }
+
+    fn peek_char(&self, offset: usize) -> Option<char> {
+        self.input.get(self.position + offset).copied()
     }
 }

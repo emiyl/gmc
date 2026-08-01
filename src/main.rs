@@ -2,10 +2,11 @@ mod compiler;
 mod data_win;
 mod project;
 
-use clap::{Parser as ClapParser, Subcommand};
+use clap::{ArgAction, Args as ClapArgs, Parser as ClapParser};
 use env_logger::Builder;
 use log::LevelFilter;
 use std::io::Write;
+use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -13,40 +14,54 @@ use std::str::FromStr;
 #[command(name = "gmlc")]
 #[command(about = "GameMaker Language compiler")]
 struct Args {
-    #[command(subcommand)]
-    command: Commands,
+    #[command(flatten)]
+    pipeline: PipelineArgs,
 }
 
-#[derive(Subcommand)]
-enum Commands {
-    Compile {
-        input: String,
-        #[arg(short, long)]
-        output: Option<String>,
-    },
-    Create {
-        project_name: String,
-        folder_path: Option<PathBuf>,
-    },
-    AddResource {
-        project_path: PathBuf,
-        resource_type: String,
-        resource_name: String,
-    },
-    AddEvent {
-        project_path: PathBuf,
-        object_name: String,
-        event_type: String,
-        event_subtype: Option<String>,
-        code: Option<String>,
-    },
-    AddObjectToRoom {
-        project_path: PathBuf,
-        room_name: String,
-        object_name: String,
-        x: Option<f32>,
-        y: Option<f32>,
-    },
+#[derive(ClapArgs, Debug, Default)]
+struct PipelineArgs {
+    /// Create an in-memory project for chained operations.
+    #[arg(long)]
+    create: Option<String>,
+
+    /// Add a resource to the in-memory project. Repeatable.
+    /// Example: --add-resource room Room1 --add-resource object Object1
+    #[arg(
+        long = "add-resource",
+        value_names = ["TYPE", "NAME"],
+        num_args = 2,
+        action = ArgAction::Append
+    )]
+    add_resources: Vec<String>,
+
+    /// Add an object instance to a room in the in-memory project. Repeatable.
+    /// Example: --add-object-to-room Room1 Object1 100 120
+    #[arg(
+        long = "add-object-to-room",
+        value_names = ["ROOM", "OBJECT", "X", "Y"],
+        num_args = 4,
+        action = ArgAction::Append
+    )]
+    add_objects_to_room: Vec<String>,
+
+    /// Add an event to an object in the in-memory project. Repeatable.
+    /// Example: --add-event Object1 create 0 "x += 1;"
+    #[arg(
+        long = "add-event",
+        value_names = ["OBJECT", "EVENT_TYPE", "EVENT_SUBTYPE", "CODE"],
+        num_args = 4,
+        action = ArgAction::Append
+    )]
+    add_events: Vec<String>,
+
+    /// Compile the in-memory project directly to a data.win file.
+    #[arg(long = "compile", value_name = "OUTPUT_DATA_WIN")]
+    compile_output: Option<PathBuf>,
+
+    /// Optionally persist the in-memory project to disk.
+    /// Pass either a .yyp file path or a directory.
+    #[arg(long = "save-project", value_name = "PROJECT_PATH")]
+    save_project: Option<PathBuf>,
 }
 
 fn main() {
@@ -57,144 +72,170 @@ fn main() {
         .format(|buf, record| writeln!(buf, "{}", record.args()))
         .init();
 
-    match args.command {
-        Commands::Compile {
-            input,
-            output: output_path,
-        } => {
-            let project_file = PathBuf::from(&input);
-            let project = match project::GmProject::load(&project_file) {
-                Ok(proj) => proj,
-                Err(e) => {
-                    eprintln!("Failed to load project: {}", e);
-                    return;
-                }
-            };
+    if !is_pipeline_mode(&args.pipeline) {
+        eprintln!(
+            "No pipeline arguments provided. Use flags like --create, --add-resource, --add-event, --add-object-to-room, and --compile."
+        );
+        return;
+    }
 
-            let output = data_win::build_data_win_from_gmproject(project);
-            // let input_content = std::fs::read_to_string(&input).expect("Failed to read input file");
-            // let program = create_program_from_gml(&input_content);
+    run_pipeline(args.pipeline);
+}
 
-            // print_disassembly(&program.bytecode);
+fn is_pipeline_mode(pipeline: &PipelineArgs) -> bool {
+    pipeline.create.is_some()
+        || !pipeline.add_resources.is_empty()
+        || !pipeline.add_events.is_empty()
+        || !pipeline.add_objects_to_room.is_empty()
+        || pipeline.compile_output.is_some()
+        || pipeline.save_project.is_some()
+}
 
-            if let Some(output_path) = output_path {
-                std::fs::write(&output_path, output).expect("Failed to write output file");
-                println!("Output written to {}", output_path);
-            } else {
-                println!("No output path specified. Output not written.");
-            }
-        }
-        Commands::Create {
-            project_name,
-            folder_path,
-        } => {
-            let project_path = folder_path.unwrap_or_else(|| {
-                let mut path = std::env::current_dir().expect("Failed to get current directory");
-                path.push(&project_name);
-                path
-            });
-            let project_file_path = project_path.join(format!("{}.yyp", project_name));
+fn run_pipeline(pipeline: PipelineArgs) {
+    let wants_compile_output = pipeline.compile_output.is_some();
+    let wants_save_project = pipeline.save_project.is_some();
 
-            let project = project::GmProject::new(&project_name);
-            if let Err(e) = project.save(&project_file_path) {
-                eprintln!("Failed to initialize project folder: {}", e);
-            } else {
-                println!(
-                    "Project '{}' initialized at '{}'",
-                    project_name,
-                    project_path.display()
-                );
-            }
-        }
-        Commands::AddResource {
-            project_path,
-            resource_type,
-            resource_name,
-        } => {
-            let mut project = match project::GmProject::load(&project_path) {
-                Ok(proj) => proj,
-                Err(e) => {
-                    eprintln!("Failed to load project: {}", e);
-                    return;
-                }
-            };
+    let Some(project_name) = pipeline.create else {
+        eprintln!("Pipeline mode requires --create <PROJECT_NAME>");
+        return;
+    };
 
-            let resource_type_enum = match resource_type.as_str() {
-                "object" => project::ResourceType::Object,
-                "room" => project::ResourceType::Room,
-                _ => {
-                    eprintln!("Invalid resource type: {}", resource_type);
-                    return;
-                }
-            };
+    let mut project = project::GmProject::new(&project_name);
 
-            project.add_resource(resource_type_enum, &resource_name);
-            project.save(&project_path).expect("Failed to save project");
-        }
-        Commands::AddObjectToRoom {
-            project_path,
-            room_name,
-            object_name,
-            x,
-            y,
-        } => {
-            let mut project = match project::GmProject::load(&project_path) {
-                Ok(proj) => proj,
-                Err(e) => {
-                    eprintln!("Failed to load project: {}", e);
-                    return;
-                }
-            };
+    for chunk in pipeline.add_resources.chunks_exact(2) {
+        let resource_type = chunk[0].to_lowercase();
+        let resource_name = &chunk[1];
 
-            let x = x.unwrap_or(0.0);
-            let y = y.unwrap_or(0.0);
-
-            if let Err(e) = project.add_object_to_room(&room_name, &object_name, x, y) {
-                eprintln!("Failed to add object to room: {}", e);
+        let resource_type_enum = match resource_type.as_str() {
+            "object" => project::ResourceType::Object,
+            "room" => project::ResourceType::Room,
+            _ => {
+                eprintln!("Invalid resource type: {}", chunk[0]);
                 return;
             }
+        };
 
-            project.save(&project_path).expect("Failed to save project");
+        project.add_resource(resource_type_enum, resource_name);
+    }
+
+    for chunk in pipeline.add_objects_to_room.chunks_exact(4) {
+        let room_name = &chunk[0];
+        let object_name = &chunk[1];
+
+        let x = match chunk[2].parse::<f32>() {
+            Ok(value) => value,
+            Err(_) => {
+                eprintln!("Invalid x coordinate: {}", chunk[2]);
+                return;
+            }
+        };
+
+        let y = match chunk[3].parse::<f32>() {
+            Ok(value) => value,
+            Err(_) => {
+                eprintln!("Invalid y coordinate: {}", chunk[3]);
+                return;
+            }
+        };
+
+        if let Err(e) = project.add_object_to_room(room_name, object_name, x, y) {
+            eprintln!("Failed to add object to room: {}", e);
+            return;
         }
-        Commands::AddEvent {
-            project_path,
+    }
+
+    for chunk in pipeline.add_events.chunks_exact(4) {
+        let object_name = &chunk[0];
+
+        let event_type = match parse_pipeline_event_type(&chunk[1]) {
+            Ok(event_type) => event_type,
+            Err(_) => {
+                eprintln!("Invalid event type: {}", chunk[1]);
+                return;
+            }
+        };
+
+        let event_subtype_i32 = match chunk[2].parse::<i32>() {
+            Ok(value) => value,
+            Err(_) => {
+                eprintln!("Invalid event subtype: {}", chunk[2]);
+                return;
+            }
+        };
+
+        let event_subtype = project::EventSubType::from_i32(event_type, event_subtype_i32);
+
+        let Some(object) = project
+            .objects
+            .iter_mut()
+            .find(|object| object.name == *object_name)
+        else {
+            eprintln!("Object '{}' not found in project", object_name);
+            return;
+        };
+
+        object.add_event(event_type, event_subtype.clone());
+
+        // Keep event code in-memory so pipeline compile can include it without writing project files.
+        project.code.push(project::CodeEntry::new_object_event(
             object_name,
             event_type,
             event_subtype,
-            code,
-        } => {
-            let mut project = match project::GmProject::load(&project_path) {
-                Ok(proj) => proj,
-                Err(e) => {
-                    eprintln!("Failed to load project: {}", e);
-                    return;
-                }
-            };
-
-            let event_type = match project::EventType::from_str(&event_type) {
-                Ok(et) => et,
-                Err(_) => {
-                    eprintln!("Invalid event type: {}", event_type);
-                    return;
-                }
-            };
-
-            let event_subtype_i32 = event_subtype.unwrap().parse::<i32>().ok();
-            let event_subtype =
-                project::EventSubType::from_i32(event_type, event_subtype_i32.unwrap_or(0));
-
-            if let Err(e) = project.add_event_to_object(
-                &project_path,
-                &object_name,
-                event_type,
-                event_subtype,
-                code,
-            ) {
-                eprintln!("Failed to add event to object: {}", e);
-                return;
-            }
-
-            project.save(&project_path).expect("Failed to save project");
-        }
+            &chunk[3],
+        ));
     }
+
+    if let Some(output_path) = pipeline.compile_output {
+        let output = data_win::build_data_win_from_gmproject(project.clone());
+        if let Err(e) = std::fs::write(&output_path, output) {
+            eprintln!("Failed to write data.win output: {}", e);
+            return;
+        }
+        println!("Output written to {}", output_path.display());
+    }
+
+    if let Some(save_path) = pipeline.save_project {
+        let project_file_path = resolve_project_file_path(&project, &save_path);
+        if let Err(e) = project.save(&project_file_path) {
+            eprintln!("Failed to save project: {}", e);
+            return;
+        }
+        println!("Project saved to {}", project_file_path.display());
+    }
+
+    if !wants_compile_output && !wants_save_project {
+        println!("Pipeline completed in memory (no disk output requested).");
+    }
+}
+
+fn resolve_project_file_path(project: &project::GmProject, save_path: &Path) -> PathBuf {
+    if save_path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.eq_ignore_ascii_case("yyp"))
+        .unwrap_or(false)
+    {
+        return save_path.to_path_buf();
+    }
+
+    save_path.join(format!("{}.yyp", project.yyp.name))
+}
+
+fn parse_pipeline_event_type(value: &str) -> Result<project::EventType, ()> {
+    project::EventType::from_str(value).or_else(|_| match value.to_ascii_lowercase().as_str() {
+        "create" => Ok(project::EventType::Create),
+        "destroy" => Ok(project::EventType::Destroy),
+        "alarm" => Ok(project::EventType::Alarm),
+        "step" => Ok(project::EventType::Step),
+        "collision" => Ok(project::EventType::Collision),
+        "keyboard" => Ok(project::EventType::Keyboard),
+        "mouse" => Ok(project::EventType::Mouse),
+        "other" => Ok(project::EventType::Other),
+        "draw" => Ok(project::EventType::Draw),
+        "keypress" => Ok(project::EventType::KeyPress),
+        "keyrelease" => Ok(project::EventType::KeyRelease),
+        "cleanup" => Ok(project::EventType::Cleanup),
+        "precreate" => Ok(project::EventType::PreCreate),
+        _ => Err(()),
+    })
 }
