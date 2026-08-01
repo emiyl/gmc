@@ -55,6 +55,9 @@ pub fn build_form(chunks: &mut Vec<ChunkBuilder>, pool: &StringPool) -> Vec<u8> 
                 Patch::Str(pos, string_id) => {
                     chunk.set_u32(pos, char_offsets[string_id]);
                 }
+                Patch::StrIndex(pos, string_id) => {
+                    chunk.set_u32(pos, string_id as u32);
+                }
                 Patch::Local(pos, rel_target) => {
                     chunk.set_u32(pos, (base_offsets[chunk_index] + rel_target) as u32);
                 }

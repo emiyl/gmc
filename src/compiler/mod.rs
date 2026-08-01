@@ -129,6 +129,20 @@ mod tests {
                 0xA0000000, // Variable index 0
             ],
         },
+        TestCase {
+            input: "msg = \"hello\"; show_debug_message(msg);",
+            expected_bytecode: &[
+                0xC0060000, // Push.s
+                0x00000000, // String reference placeholder (patched in CODE chunk)
+                0x4565FFFA, // Pop.v.s
+                0xA0000000, // Variable index 0
+                0xC005FFFA, // Push.v
+                0xA0000000, // Variable index 0
+                0xD9020001, // Call.i args=1
+                0x00000000, // Function index 0
+                0x9E050000, // PopZ
+            ],
+        },
     ];
 
     #[test]

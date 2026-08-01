@@ -30,11 +30,15 @@ pub enum Opcode {
 
 pub struct Bytecode {
     pub data: Vec<u8>,
+    pub string_fixups: Vec<(usize, String)>,
 }
 
 impl Bytecode {
     pub fn new() -> Self {
-        Self { data: Vec::new() }
+        Self {
+            data: Vec::new(),
+            string_fixups: Vec::new(),
+        }
     }
 
     pub fn write_u32(&mut self, value: u32) {

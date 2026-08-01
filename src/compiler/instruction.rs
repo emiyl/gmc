@@ -39,6 +39,7 @@ pub enum BranchType {
 pub enum Instruction {
     PushI(i32),
     PushE(i16),
+    PushS(String),
     Push(Variable),
 
     Branch(u16, BranchType),

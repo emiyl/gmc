@@ -469,6 +469,12 @@ impl Parser {
                 Expr::Integer(value)
             }
 
+            Token::StringLiteral(value) => {
+                let value = value.clone();
+                self.advance();
+                Expr::String(value)
+            }
+
             Token::Exclamation => {
                 self.advance();
                 let operand = self.parse_primary();

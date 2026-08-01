@@ -6,6 +6,7 @@ use super::resolver::{Function, Variable};
 fn value_type_from_expr(expr: &Expr) -> ValueType {
     match expr {
         Expr::Integer(_) => ValueType::Int32,
+        Expr::String(_) => ValueType::String,
         Expr::Variable(_) => ValueType::Var,
         Expr::Binary { operator, .. } => match operator {
             BinaryOp::Mul
@@ -197,6 +198,10 @@ impl Compiler {
         match expr {
             Expr::Integer(value) => {
                 self.instructions.push(Instruction::PushI(*value));
+            }
+
+            Expr::String(value) => {
+                self.instructions.push(Instruction::PushS(value.clone()));
             }
 
             Expr::Variable(name) => {

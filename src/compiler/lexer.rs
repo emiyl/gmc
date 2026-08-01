@@ -2,6 +2,7 @@
 pub enum Token {
     Identifier(String),
     Number(i32),
+    StringLiteral(String),
 
     ShiftLeft,
     ShiftRight,
@@ -39,9 +40,6 @@ pub enum Token {
     LeftBrace,
     RightBrace,
     Comma,
-
-    Quotation,
-    Apostrophe,
 
     EOF,
 }
@@ -177,8 +175,7 @@ impl Lexer {
             ',' => Token::Comma,
             '{' => Token::LeftBrace,
             '}' => Token::RightBrace,
-            '"' => Token::Quotation,
-            '\'' => Token::Apostrophe,
+            '"' | '\'' => return self.read_string(c),
 
             '0'..='9' => return self.read_number(),
             'a'..='z' | 'A'..='Z' | '_' => return self.read_identifier(),
@@ -214,6 +211,31 @@ impl Lexer {
         let text: String = self.input[start..self.position].iter().collect();
 
         Token::Identifier(text)
+    }
+
+    fn read_string(&mut self, quote: char) -> Token {
+        // Consume opening quote.
+        self.position += 1;
+        let start = self.position;
+
+        while self.position < self.input.len() {
+            let ch = self.input[self.position];
+            if ch == quote {
+                let text: String = self.input[start..self.position].iter().collect();
+                self.position += 1; // consume closing quote
+                return Token::StringLiteral(text);
+            }
+
+            // Preserve escaped characters literally for now; runtime string semantics
+            // are handled by VM string functions.
+            if ch == '\\' && self.peek_char(1).is_some() {
+                self.position += 1;
+            }
+
+            self.position += 1;
+        }
+
+        panic!("Unterminated string literal");
     }
 
     fn peek_char(&self, offset: usize) -> Option<char> {

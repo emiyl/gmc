@@ -50,7 +50,9 @@ pub fn compile_code_entry(
         },
     };
 
-    CompiledCodeEntry::new(owner, entry.name.clone(), program.bytecode.data)
+    let mut compiled = CompiledCodeEntry::new(owner, entry.name.clone(), program.bytecode.data);
+    compiled.string_fixups = program.bytecode.string_fixups;
+    compiled
 }
 
 pub fn compile_room(room: GmRoom, object_id_by_name: &HashMap<String, u32>) -> CompiledRoom {

@@ -3,6 +3,7 @@ use crate::data_win::string_pool::StringPool;
 #[derive(Clone, Copy, Debug)]
 pub enum Patch {
     Str(usize, usize),
+    StrIndex(usize, usize),
     Local(usize, usize),
 }
 
@@ -83,6 +84,16 @@ impl ChunkBuilder {
         let pos = self.pos();
         self.u32(0);
         self.patches.push(Patch::Str(pos, id));
+    }
+
+    pub fn str_ref_set_at(&mut self, pool: &mut StringPool, pos: usize, value: &str) {
+        let id = pool.intern(value);
+        self.patches.push(Patch::Str(pos, id));
+    }
+
+    pub fn str_index_set_at(&mut self, pool: &mut StringPool, pos: usize, value: &str) {
+        let id = pool.intern(value);
+        self.patches.push(Patch::StrIndex(pos, id));
     }
 
     pub fn local_ref_placeholder(&mut self) -> usize {

@@ -15,6 +15,7 @@ pub enum Statement {
 #[derive(Debug)]
 pub enum Expr {
     Integer(i32),
+    String(String),
     Variable(String),
 
     Call {

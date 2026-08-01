@@ -48,6 +48,10 @@ pub fn build(
         let bytecode_start = chunk.pos();
         chunk.bytes(&entry.bytecode);
 
+        for (patch_offset, value) in &entry.string_fixups {
+            chunk.str_index_set_at(pool, bytecode_start + *patch_offset, value);
+        }
+
         let rel = bytecode_start as i64 - rel_pos as i64;
         chunk.set_u32(rel_pos, rel as i32 as u32);
     }
