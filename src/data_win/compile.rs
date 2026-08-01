@@ -23,6 +23,7 @@ pub fn compile_code_entry(
     let lexer = Lexer::new(entry.code.clone());
     let mut parser = Parser::new(lexer);
     let program_ast = parser.parse_program();
+    log::debug!("Parsed AST: {:#?}", program_ast);
 
     let mut compiler = Compiler::with_struct_name_prefix(entry.name.clone());
     compiler.compile_program(&program_ast);
