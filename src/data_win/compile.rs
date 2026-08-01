@@ -1,7 +1,11 @@
 use std::collections::HashMap;
 
 use crate::compiler::{
-    compiler::Compiler, disassembler::print_disassembly, lexer::Lexer, parser::Parser,
+    ast::Statement,
+    compiler::{Compiler, StructConstructor},
+    disassembler::print_disassembly,
+    lexer::Lexer,
+    parser::Parser,
     resolver::Resolver,
 };
 use crate::data_win::model::{
@@ -14,28 +18,16 @@ use crate::project::{CodeEntry, CodeOwner, GmObject, GmRoom};
 pub fn compile_code_entry(
     entry: &CodeEntry,
     object_id_by_name: &HashMap<String, u32>,
-    functions: &mut Vec<String>,
-    variables: &mut Vec<String>,
-) -> CompiledCodeEntry {
+    resolver: &mut Resolver,
+) -> Vec<CompiledCodeEntry> {
     let lexer = Lexer::new(entry.code.clone());
     let mut parser = Parser::new(lexer);
     let program_ast = parser.parse_program();
 
     let mut compiler = Compiler::new();
     compiler.compile_program(&program_ast);
-
-    let mut resolver = Resolver::new();
+    let struct_constructors = compiler.struct_constructors.clone();
     let program = resolver.resolve(compiler.instructions);
-
-    print_disassembly(&program.bytecode);
-
-    let mut resolved_functions = resolver.functions.values().cloned().collect::<Vec<_>>();
-    resolved_functions.sort_by_key(|function| function.var_ref);
-    functions.extend(resolved_functions.into_iter().map(|function| function.name));
-
-    let mut resolved_variables = resolver.variables.values().cloned().collect::<Vec<_>>();
-    resolved_variables.sort_by_key(|variable| variable.var_ref);
-    variables.extend(resolved_variables.into_iter().map(|variable| variable.name));
 
     let owner = match &entry.owner {
         CodeOwner::Script { name } => CompiledCodeOwner::Script { name: name.clone() },
@@ -50,7 +42,52 @@ pub fn compile_code_entry(
         },
     };
 
+    print_disassembly(&program.bytecode);
+
     let mut compiled = CompiledCodeEntry::new(owner, entry.name.clone(), program.bytecode.data);
+    compiled.string_fixups = program.bytecode.string_fixups;
+
+    let mut compiled_entries = vec![compiled];
+    if matches!(entry.owner, CodeOwner::ObjectEvent { .. }) {
+        for constructor in struct_constructors {
+            compiled_entries.push(compile_struct_constructor_entry(
+                &constructor,
+                &entry.name,
+                resolver,
+            ));
+        }
+    }
+
+    compiled_entries
+}
+
+fn compile_struct_constructor_entry(
+    constructor: &StructConstructor,
+    parent_entry_name: &str,
+    resolver: &mut Resolver,
+) -> CompiledCodeEntry {
+    let statements = constructor
+        .fields
+        .iter()
+        .map(|(key, value)| {
+            Statement::Assignment {
+                name: format!("self.{}", key),
+                value: value.clone(),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let mut compiler = Compiler::new();
+    compiler.compile_program(&statements);
+    let program = resolver.resolve(compiler.instructions);
+
+    let mut compiled = CompiledCodeEntry::new(
+        CompiledCodeOwner::Script {
+            name: constructor.name.clone(),
+        },
+        format!("gml_Script_{}@{}", constructor.name, parent_entry_name),
+        program.bytecode.data,
+    );
     compiled.string_fixups = program.bytecode.string_fixups;
     compiled
 }

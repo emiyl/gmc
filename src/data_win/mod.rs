@@ -6,9 +6,10 @@ mod model;
 mod sections;
 mod string_pool;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::compiler::Program;
+use crate::compiler::resolver::Resolver;
 use crate::data_win::chunk::ChunkBuilder;
 use crate::data_win::compile::{compile_code_entry, compile_object, compile_room};
 use crate::data_win::finalize::build_form;
@@ -157,32 +158,30 @@ pub fn build_data_win_from_gmproject(project: GmProject) -> Vec<u8> {
         .map(|room| compile_room(room, &object_id_by_name))
         .collect::<Vec<_>>();
 
-    let mut function_names = Vec::new();
-    let mut variable_names = Vec::new();
+    let mut resolver = Resolver::new();
     let code = project
         .code
         .iter()
-        .map(|entry| {
-            compile_code_entry(
-                entry,
-                &object_id_by_name,
-                &mut function_names,
-                &mut variable_names,
+        .flat_map(|entry| compile_code_entry(entry, &object_id_by_name, &mut resolver))
+        .collect::<Vec<_>>();
+
+    let mut resolved_variables = resolver.variables.values().cloned().collect::<Vec<_>>();
+    resolved_variables.sort_by_key(|variable| variable.var_ref);
+    let variables = resolved_variables
+        .into_iter()
+        .map(|variable| {
+            CompiledVariable::with_name(
+                strip_scope_prefix(&variable.name),
+                variable.var_ref as i32,
             )
         })
         .collect::<Vec<_>>();
 
-    dedupe_in_place(&mut function_names);
-    dedupe_in_place(&mut variable_names);
-
-    let variables = variable_names
+    let mut resolved_functions = resolver.functions.values().cloned().collect::<Vec<_>>();
+    resolved_functions.sort_by_key(|function| function.var_ref);
+    let functions = resolved_functions
         .into_iter()
-        .enumerate()
-        .map(|(index, name)| CompiledVariable::with_name(name, index as i32))
-        .collect::<Vec<_>>();
-    let functions = function_names
-        .into_iter()
-        .map(CompiledFunction::with_name)
+        .map(|function| CompiledFunction::with_name(function.name))
         .collect::<Vec<_>>();
 
     let code_lookup = code
@@ -223,7 +222,10 @@ pub fn build_data_win_from_gmproject(project: GmProject) -> Vec<u8> {
     data_win.build()
 }
 
-fn dedupe_in_place(values: &mut Vec<String>) {
-    let mut seen = HashSet::new();
-    values.retain(|value| seen.insert(value.clone()));
+fn strip_scope_prefix(name: &str) -> String {
+    name.strip_prefix("global.")
+        .or_else(|| name.strip_prefix("self."))
+        .or_else(|| name.strip_prefix("builtin."))
+        .unwrap_or(name)
+        .to_string()
 }

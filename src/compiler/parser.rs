@@ -363,7 +363,7 @@ impl Parser {
     fn parse_struct_literal(&mut self) -> Expr {
         self.expect(Token::LeftBrace);
 
-        let mut expr = self.build_call("__gmlc_struct_create", vec![]);
+        let mut fields = Vec::new();
 
         if self.current != Token::RightBrace {
             loop {
@@ -383,8 +383,7 @@ impl Parser {
 
                 self.expect(Token::Colon);
                 let value = self.parse_expression();
-
-                expr = self.build_call("variable_struct_set", vec![expr, Expr::String(key), value]);
+                fields.push((key, value));
 
                 if self.current == Token::Comma {
                     self.advance();
@@ -398,7 +397,7 @@ impl Parser {
         }
 
         self.expect(Token::RightBrace);
-        expr
+        Expr::StructLiteral(fields)
     }
 
     fn parse_postfix(&mut self, mut expr: Expr) -> Expr {
@@ -417,7 +416,10 @@ impl Parser {
                     };
                     let field = field.clone();
                     self.advance();
-                    expr = self.build_call("variable_struct_get", vec![expr, Expr::String(field)]);
+                    expr = Expr::MemberAccess {
+                        target: Box::new(expr),
+                        field,
+                    };
                 }
                 _ => break,
             }

@@ -59,6 +59,8 @@ impl Word {
 fn instruction_word_len(instruction: &Instruction) -> usize {
     match instruction {
         Instruction::PushI(_) => 1,
+        Instruction::PushI32(_) => 2,
+        Instruction::PushFunc(_) => 2,
         Instruction::PushE(_) => 1,
         Instruction::PushS(_) => 2,
         Instruction::Push(_) => 2,
@@ -69,6 +71,7 @@ fn instruction_word_len(instruction: &Instruction) -> usize {
         Instruction::Conv { .. } => 1,
         Instruction::Call { .. } => 2,
         Instruction::Break(_) => 1,
+        Instruction::Dup(_) => 1,
         Instruction::Ret(_) => 1,
         Instruction::Exit => 1,
         Instruction::PopZ => 1,
@@ -111,6 +114,24 @@ pub fn encode(instructions: Vec<Instruction>) -> Bytecode {
 
                 let word = Word::new(opcode as u8, instr_type1, instr_type2, value_u16).to_u32();
                 output.write_u32(word);
+            }
+
+            Instruction::PushI32(value) => {
+                let opcode = Opcode::Push as u16;
+                let instr_type1 = ValueType::Int32 as u8;
+                let instr_type2 = ValueType::Double as u8;
+                let word = Word::new(opcode as u8, instr_type1, instr_type2, 0).to_u32();
+                output.write_u32(word);
+                output.write_u32(value as u32);
+            }
+
+            Instruction::PushFunc(function) => {
+                let opcode = Opcode::Push as u16;
+                let instr_type1 = ValueType::Int32 as u8;
+                let instr_type2 = ValueType::Double as u8;
+                let word = Word::new(opcode as u8, instr_type1, instr_type2, 0).to_u32();
+                output.write_u32(word);
+                output.write_u32(function.var_ref);
             }
 
             Instruction::PushE(value) => {
@@ -259,6 +280,13 @@ pub fn encode(instructions: Vec<Instruction>) -> Bytecode {
                 let type2 = ValueType::Double as u8;
                 let sub_opcode_u16 = u16::from_le_bytes(sub_opcode.to_le_bytes());
                 let word = Word::new(opcode as u8, type1, type2, sub_opcode_u16).to_u32();
+                output.write_u32(word);
+            }
+
+            Instruction::Dup(value_type) => {
+                let opcode = Opcode::Dup as u16;
+                let type1 = value_type as u8;
+                let word = Word::new(opcode as u8, type1, 0, 0).to_u32();
                 output.write_u32(word);
             }
 

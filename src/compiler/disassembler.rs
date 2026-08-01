@@ -109,6 +109,13 @@ pub fn print_disassembly(bytecode: &Bytecode) {
                                 type2_str = type_print.1,
                                 num = instr_instance_type
                             )
+                        } else if value_type == ValueType::Int32 {
+                            format!(
+                                "{opcode:?}.{type2_char} {num} (pushes: [{type2_str}])",
+                                type2_char = type_print.0,
+                                type2_str = type_print.1,
+                                num = extra_data[0] as i32
+                            )
                         } else {
                             format!(
                                 "{opcode:?}.{type2_char} 0x{extra_data:8X} (pushes: [{type2_str}])",
@@ -127,6 +134,16 @@ pub fn print_disassembly(bytecode: &Bytecode) {
                             type2_str =
                                 get_type_print(ValueType::try_from(instr_type2 as u8).unwrap()).1,
                             num = instr_instance_type
+                        )
+                    }
+
+                    Opcode::Dup => {
+                        let value_type = ValueType::try_from(instr_type1 as u8).unwrap();
+                        let type_print = get_type_print(value_type);
+                        format!(
+                            "{opcode:?}.{type_char} (duplicates top [{type_str}])",
+                            type_char = type_print.0,
+                            type_str = type_print.1
                         )
                     }
 

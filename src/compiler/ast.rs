@@ -44,6 +44,13 @@ pub enum Expr {
     String(String),
     Variable(String),
 
+    StructLiteral(Vec<(String, Expr)>),
+
+    MemberAccess {
+        target: Box<Expr>,
+        field: String,
+    },
+
     Call {
         name: String,
         args: Vec<Expr>,

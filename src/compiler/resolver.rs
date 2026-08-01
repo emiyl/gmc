@@ -110,6 +110,11 @@ impl Resolver {
                     Instruction::Call { function, args_len }
                 }
 
+                Instruction::PushFunc(function) => {
+                    let function = self.get_function(&function.name);
+                    Instruction::PushFunc(function)
+                }
+
                 other => other,
             })
             .collect::<Vec<Instruction>>();

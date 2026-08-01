@@ -2,6 +2,13 @@ use super::ast::*;
 use super::bytecode::Opcode;
 use super::instruction::*;
 use super::resolver::{Function, Variable};
+use std::collections::{HashMap, HashSet};
+
+#[derive(Debug, Clone)]
+pub struct StructConstructor {
+    pub name: String,
+    pub fields: Vec<(String, Expr)>,
+}
 
 #[derive(Debug)]
 struct LoopScope {
@@ -14,6 +21,8 @@ fn value_type_from_expr(expr: &Expr) -> ValueType {
         Expr::Integer(_) => ValueType::Int32,
         Expr::String(_) => ValueType::String,
         Expr::Variable(_) => ValueType::Var,
+        Expr::StructLiteral(_) => ValueType::Var,
+        Expr::MemberAccess { .. } => ValueType::Var,
         Expr::Binary { operator, .. } => match operator {
             BinaryOp::Mul
             | BinaryOp::Div
@@ -56,6 +65,9 @@ fn value_type_from_expr(expr: &Expr) -> ValueType {
 
 pub struct Compiler {
     pub instructions: Vec<Instruction>,
+    pub struct_constructors: Vec<StructConstructor>,
+    struct_instance_vars: HashSet<String>,
+    struct_literal_fields: HashMap<String, Vec<(String, Expr)>>,
     break_scopes: Vec<Vec<usize>>,
     loop_scopes: Vec<LoopScope>,
     temp_counter: u32,
@@ -65,10 +77,114 @@ impl Compiler {
     pub fn new() -> Self {
         Self {
             instructions: Vec::new(),
+            struct_constructors: Vec::new(),
+            struct_instance_vars: HashSet::new(),
+            struct_literal_fields: HashMap::new(),
             break_scopes: Vec::new(),
             loop_scopes: Vec::new(),
             temp_counter: 0,
         }
+    }
+
+    fn emit_call(&mut self, name: &str, args_len: usize) {
+        self.instructions.push(Instruction::Call {
+            function: Function {
+                name: name.to_string(),
+                var_ref: 0,
+            },
+            args_len,
+        });
+    }
+
+    fn compile_struct_literal_expression(&mut self, fields: &[(String, Expr)]) {
+        // Match GMS2 struct-literal prologue shape: skip static-init body at runtime.
+        let skip_init_branch = self.emit_branch(BranchType::Unconditional);
+
+        self.emit_call("@@SetStatic@@", 0);
+        for (key, value) in fields {
+            self.compile_expression(value);
+            self.instructions.push(Instruction::Pop {
+                variable: Variable {
+                    name: format!("self.{}", key),
+                    var_ref: 0xA000_0000,
+                },
+                dst_type: ValueType::Var,
+                src_type: value_type_from_expr(value),
+            });
+        }
+        self.instructions.push(Instruction::Exit);
+
+        let after_init = self.instructions.len();
+        self.patch_branch_to(skip_init_branch, after_init);
+
+        let struct_name = format!("___struct___{}", self.struct_constructors.len());
+        self.struct_constructors.push(StructConstructor {
+            name: struct_name.clone(),
+            fields: fields.to_vec(),
+        });
+
+        self.instructions.push(Instruction::PushFunc(Function {
+            name: struct_name,
+            var_ref: 0,
+        }));
+        self.emit_conv_if_needed(ValueType::Int32, ValueType::Var);
+
+        self.emit_call("@@NullObject@@", 0);
+        self.emit_call("method", 2);
+
+        self.instructions.push(Instruction::Dup(ValueType::Var));
+        self.instructions.push(Instruction::Pop {
+            variable: Variable {
+                name: format!(
+                    "global.{}",
+                    self.struct_constructors
+                        .last()
+                        .expect("constructor added")
+                        .name
+                ),
+                var_ref: 0xA000_0000,
+            },
+            dst_type: ValueType::Var,
+            src_type: ValueType::Var,
+        });
+
+        self.emit_call("@@NewGMLObject@@", 1);
+
+        // Ensure struct fields are materialized on this runtime even when constructor
+        // method resolution differs from vanilla runner expectations.
+        let temp_name = self.next_temp_name("struct");
+        let temp_var = Variable {
+            name: temp_name.clone(),
+            var_ref: 0xA000_0000,
+        };
+        self.instructions.push(Instruction::Pop {
+            variable: temp_var.clone(),
+            dst_type: ValueType::Var,
+            src_type: ValueType::Var,
+        });
+
+        for (key, value) in fields {
+            self.compile_expression(value);
+            self.emit_conv_if_needed(value_type_from_expr(value), ValueType::Var);
+
+            self.instructions.push(Instruction::PushS(key.clone()));
+            self.emit_conv_if_needed(ValueType::String, ValueType::Var);
+
+            self.instructions.push(Instruction::Push(temp_var.clone()));
+            self.emit_conv_if_needed(ValueType::Var, ValueType::Int32);
+            self.instructions.push(Instruction::PushI32(100000));
+            self.instructions.push(Instruction::BinaryOp {
+                lhs_type: ValueType::Int32,
+                binary_op: BinaryOp::Add,
+                rhs_type: ValueType::Int32,
+            });
+            self.emit_conv_if_needed(ValueType::Int32, ValueType::Var);
+
+            self.emit_call("variable_struct_set", 3);
+            self.emit_popz();
+        }
+
+        self.instructions.push(Instruction::Push(temp_var));
     }
 
     pub fn compile_program(&mut self, program: &[Statement]) {
@@ -265,6 +381,15 @@ impl Compiler {
             Statement::Assignment { name, value } => {
                 if self.try_compile_self_update_assignment(name, value) {
                     return;
+                }
+
+                if let Expr::StructLiteral(fields) = value {
+                    self.struct_instance_vars.insert(name.clone());
+                    self.struct_literal_fields
+                        .insert(name.clone(), fields.clone());
+                } else {
+                    self.struct_instance_vars.remove(name);
+                    self.struct_literal_fields.remove(name);
                 }
 
                 self.compile_expression(value);
@@ -569,6 +694,43 @@ impl Compiler {
                 };
 
                 self.instructions.push(Instruction::Push(var));
+            }
+
+            Expr::StructLiteral(fields) => {
+                self.compile_struct_literal_expression(fields);
+            }
+
+            Expr::MemberAccess { target, field } => {
+                if let Expr::Variable(name) = target.as_ref() {
+                    if let Some(fields) = self.struct_literal_fields.get(name) {
+                        if let Some((_, value)) = fields.iter().find(|(key, _)| key == field) {
+                            let folded_value = value.clone();
+                            self.compile_expression(&folded_value);
+                            return;
+                        }
+                    }
+                }
+
+                self.instructions.push(Instruction::PushS(field.clone()));
+                self.emit_conv_if_needed(ValueType::String, ValueType::Var);
+                self.compile_expression(target);
+
+                // Butterscotch currently exposes struct instance ids as small ints; convert to
+                // the runtime target-id domain expected by variable lookups.
+                if let Expr::Variable(name) = target.as_ref() {
+                    if self.struct_instance_vars.contains(name) {
+                        self.emit_conv_if_needed(value_type_from_expr(target), ValueType::Int32);
+                        self.instructions.push(Instruction::PushI32(100000));
+                        self.instructions.push(Instruction::BinaryOp {
+                            lhs_type: ValueType::Int32,
+                            binary_op: BinaryOp::Add,
+                            rhs_type: ValueType::Int32,
+                        });
+                    }
+                }
+
+                self.emit_conv_if_needed(value_type_from_expr(target), ValueType::Var);
+                self.emit_call("variable_struct_get", 2);
             }
 
             Expr::Binary {
