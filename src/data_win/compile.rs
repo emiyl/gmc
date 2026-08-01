@@ -24,7 +24,7 @@ pub fn compile_code_entry(
     let mut parser = Parser::new(lexer);
     let program_ast = parser.parse_program();
 
-    let mut compiler = Compiler::new();
+    let mut compiler = Compiler::with_struct_name_prefix(entry.name.clone());
     compiler.compile_program(&program_ast);
     let struct_constructors = compiler.struct_constructors.clone();
     let program = resolver.resolve(compiler.instructions);
@@ -50,46 +50,46 @@ pub fn compile_code_entry(
     let mut compiled_entries = vec![compiled];
     if matches!(entry.owner, CodeOwner::ObjectEvent { .. }) {
         for constructor in struct_constructors {
-            compiled_entries.push(compile_struct_constructor_entry(
-                &constructor,
-                &entry.name,
-                resolver,
-            ));
+            compiled_entries.extend(compile_struct_constructor_entries(&constructor, resolver));
         }
     }
 
     compiled_entries
 }
 
-fn compile_struct_constructor_entry(
+fn compile_struct_constructor_entries(
     constructor: &StructConstructor,
-    parent_entry_name: &str,
     resolver: &mut Resolver,
-) -> CompiledCodeEntry {
+) -> Vec<CompiledCodeEntry> {
     let statements = constructor
         .fields
         .iter()
-        .map(|(key, value)| {
-            Statement::Assignment {
-                name: format!("self.{}", key),
-                value: value.clone(),
-            }
+        .map(|(key, value)| Statement::Assignment {
+            name: format!("self.{}", key),
+            value: value.clone(),
         })
         .collect::<Vec<_>>();
 
-    let mut compiler = Compiler::new();
+    let mut compiler = Compiler::with_struct_name_prefix(constructor.name.clone());
     compiler.compile_program(&statements);
+    let nested_constructors = compiler.struct_constructors.clone();
     let program = resolver.resolve(compiler.instructions);
 
     let mut compiled = CompiledCodeEntry::new(
         CompiledCodeOwner::Script {
             name: constructor.name.clone(),
         },
-        format!("gml_Script_{}@{}", constructor.name, parent_entry_name),
+        constructor.name.clone(),
         program.bytecode.data,
     );
     compiled.string_fixups = program.bytecode.string_fixups;
-    compiled
+
+    let mut entries = vec![compiled];
+    for nested in nested_constructors {
+        entries.extend(compile_struct_constructor_entries(&nested, resolver));
+    }
+
+    entries
 }
 
 pub fn compile_room(room: GmRoom, object_id_by_name: &HashMap<String, u32>) -> CompiledRoom {

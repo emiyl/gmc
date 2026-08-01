@@ -68,6 +68,7 @@ pub struct Compiler {
     pub struct_constructors: Vec<StructConstructor>,
     struct_instance_vars: HashSet<String>,
     struct_literal_fields: HashMap<String, Vec<(String, Expr)>>,
+    struct_name_prefix: String,
     break_scopes: Vec<Vec<usize>>,
     loop_scopes: Vec<LoopScope>,
     temp_counter: u32,
@@ -80,10 +81,17 @@ impl Compiler {
             struct_constructors: Vec::new(),
             struct_instance_vars: HashSet::new(),
             struct_literal_fields: HashMap::new(),
+            struct_name_prefix: String::new(),
             break_scopes: Vec::new(),
             loop_scopes: Vec::new(),
             temp_counter: 0,
         }
+    }
+
+    pub fn with_struct_name_prefix(prefix: impl Into<String>) -> Self {
+        let mut compiler = Self::new();
+        compiler.struct_name_prefix = prefix.into();
+        compiler
     }
 
     fn emit_call(&mut self, name: &str, args_len: usize) {
@@ -117,7 +125,15 @@ impl Compiler {
         let after_init = self.instructions.len();
         self.patch_branch_to(skip_init_branch, after_init);
 
-        let struct_name = format!("___struct___{}", self.struct_constructors.len());
+        let struct_name = if self.struct_name_prefix.is_empty() {
+            format!("___struct___{}", self.struct_constructors.len())
+        } else {
+            format!(
+                "___struct___{}_{}",
+                self.struct_name_prefix,
+                self.struct_constructors.len()
+            )
+        };
         self.struct_constructors.push(StructConstructor {
             name: struct_name.clone(),
             fields: fields.to_vec(),
@@ -374,6 +390,28 @@ impl Compiler {
             name: name.to_string(),
             value,
         });
+    }
+
+    fn resolve_known_struct_expr(&self, expr: &Expr) -> Option<Expr> {
+        match expr {
+            Expr::StructLiteral(fields) => Some(Expr::StructLiteral(fields.clone())),
+            Expr::Variable(name) => self
+                .struct_literal_fields
+                .get(name)
+                .map(|fields| Expr::StructLiteral(fields.clone())),
+            Expr::MemberAccess { target, field } => {
+                let resolved_target = self.resolve_known_struct_expr(target)?;
+                if let Expr::StructLiteral(fields) = resolved_target {
+                    fields
+                        .iter()
+                        .find(|(key, _)| key == field)
+                        .map(|(_, value)| value.clone())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
     }
 
     fn compile_statement(&mut self, statement: &Statement) {
@@ -701,13 +739,11 @@ impl Compiler {
             }
 
             Expr::MemberAccess { target, field } => {
-                if let Expr::Variable(name) = target.as_ref() {
-                    if let Some(fields) = self.struct_literal_fields.get(name) {
-                        if let Some((_, value)) = fields.iter().find(|(key, _)| key == field) {
-                            let folded_value = value.clone();
-                            self.compile_expression(&folded_value);
-                            return;
-                        }
+                if let Some(Expr::StructLiteral(fields)) = self.resolve_known_struct_expr(target) {
+                    if let Some((_, value)) = fields.iter().find(|(key, _)| key == field) {
+                        let folded_value = value.clone();
+                        self.compile_expression(&folded_value);
+                        return;
                     }
                 }
 
@@ -715,21 +751,20 @@ impl Compiler {
                 self.emit_conv_if_needed(ValueType::String, ValueType::Var);
                 self.compile_expression(target);
 
-                // Butterscotch currently exposes struct instance ids as small ints; convert to
-                // the runtime target-id domain expected by variable lookups.
-                if let Expr::Variable(name) = target.as_ref() {
-                    if self.struct_instance_vars.contains(name) {
-                        self.emit_conv_if_needed(value_type_from_expr(target), ValueType::Int32);
-                        self.instructions.push(Instruction::PushI32(100000));
-                        self.instructions.push(Instruction::BinaryOp {
-                            lhs_type: ValueType::Int32,
-                            binary_op: BinaryOp::Add,
-                            rhs_type: ValueType::Int32,
-                        });
-                    }
+                // Butterscotch currently exposes struct handles as small ints; convert them
+                // into the runtime target-id domain expected by variable_struct_get.
+                if !matches!(target.as_ref(), Expr::Integer(_)) {
+                    self.emit_conv_if_needed(value_type_from_expr(target), ValueType::Int32);
+                    self.instructions.push(Instruction::PushI32(100000));
+                    self.instructions.push(Instruction::BinaryOp {
+                        lhs_type: ValueType::Int32,
+                        binary_op: BinaryOp::Add,
+                        rhs_type: ValueType::Int32,
+                    });
+                    self.emit_conv_if_needed(ValueType::Int32, ValueType::Var);
+                } else {
+                    self.emit_conv_if_needed(value_type_from_expr(target), ValueType::Var);
                 }
-
-                self.emit_conv_if_needed(value_type_from_expr(target), ValueType::Var);
                 self.emit_call("variable_struct_get", 2);
             }
 
@@ -777,6 +812,53 @@ impl Compiler {
 
             Expr::Call { name, args } => {
                 if name == "array_get" && self.compile_array_read_call(expr) {
+                    return;
+                }
+
+                if name == "variable_struct_get" && args.len() == 2 {
+                    self.compile_expression(&args[1]);
+                    self.emit_conv_if_needed(value_type_from_expr(&args[1]), ValueType::Var);
+
+                    self.compile_expression(&args[0]);
+                    if !matches!(args[0], Expr::Integer(_)) {
+                        self.emit_conv_if_needed(value_type_from_expr(&args[0]), ValueType::Int32);
+                        self.instructions.push(Instruction::PushI32(100000));
+                        self.instructions.push(Instruction::BinaryOp {
+                            lhs_type: ValueType::Int32,
+                            binary_op: BinaryOp::Add,
+                            rhs_type: ValueType::Int32,
+                        });
+                        self.emit_conv_if_needed(ValueType::Int32, ValueType::Var);
+                    } else {
+                        self.emit_conv_if_needed(value_type_from_expr(&args[0]), ValueType::Var);
+                    }
+
+                    self.emit_call("variable_struct_get", 2);
+                    return;
+                }
+
+                if name == "variable_struct_set" && args.len() == 3 {
+                    self.compile_expression(&args[2]);
+                    self.emit_conv_if_needed(value_type_from_expr(&args[2]), ValueType::Var);
+
+                    self.compile_expression(&args[1]);
+                    self.emit_conv_if_needed(value_type_from_expr(&args[1]), ValueType::Var);
+
+                    self.compile_expression(&args[0]);
+                    if !matches!(args[0], Expr::Integer(_)) {
+                        self.emit_conv_if_needed(value_type_from_expr(&args[0]), ValueType::Int32);
+                        self.instructions.push(Instruction::PushI32(100000));
+                        self.instructions.push(Instruction::BinaryOp {
+                            lhs_type: ValueType::Int32,
+                            binary_op: BinaryOp::Add,
+                            rhs_type: ValueType::Int32,
+                        });
+                        self.emit_conv_if_needed(ValueType::Int32, ValueType::Var);
+                    } else {
+                        self.emit_conv_if_needed(value_type_from_expr(&args[0]), ValueType::Var);
+                    }
+
+                    self.emit_call("variable_struct_set", 3);
                     return;
                 }
 
