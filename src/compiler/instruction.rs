@@ -38,6 +38,7 @@ pub enum BranchType {
 #[derive(Debug)]
 pub enum Instruction {
     PushI(i32),
+    PushE(i16),
     Push(Variable),
 
     Branch(u16, BranchType),

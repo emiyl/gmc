@@ -54,7 +54,7 @@ pub fn print_disassembly(bytecode: &Bytecode) {
                     | Opcode::Shl
                     | Opcode::Shr => {
                         format!(
-                            "{opcode:?}.{type1_char}.{type2_char} (pops: [a, b] -> pushes: [result])",
+                            "{opcode:?}.{type2_char}.{type1_char} (pops: [a, b] -> pushes: [result])",
                             type1_char =
                                 get_type_print(ValueType::try_from(instr_type1 as u8).unwrap()).0,
                             type2_char =
@@ -100,14 +100,23 @@ pub fn print_disassembly(bytecode: &Bytecode) {
                     }
 
                     Opcode::Push => {
-                        let type_print =
-                            get_type_print(ValueType::try_from(instr_type2 as u8).unwrap());
-                        format!(
-                            "{opcode:?}.{type2_char} 0x{extra_data:8X} (pushes: [{type2_str}])",
-                            type2_char = type_print.0,
-                            type2_str = type_print.1,
-                            extra_data = extra_data[0]
-                        )
+                        let value_type = ValueType::try_from(instr_type2 as u8).unwrap();
+                        let type_print = get_type_print(value_type);
+                        if value_type == ValueType::Int16 {
+                            format!(
+                                "{opcode:?}.{type2_char} {num} (pushes: [{type2_str}])",
+                                type2_char = type_print.0,
+                                type2_str = type_print.1,
+                                num = instr_instance_type
+                            )
+                        } else {
+                            format!(
+                                "{opcode:?}.{type2_char} 0x{extra_data:8X} (pushes: [{type2_str}])",
+                                type2_char = type_print.0,
+                                type2_str = type_print.1,
+                                extra_data = extra_data[0]
+                            )
+                        }
                     }
 
                     Opcode::PushI => {

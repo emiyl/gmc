@@ -105,27 +105,27 @@ mod tests {
                 0xA0000000, // Variable index 0
                 0xC005FFFA, // Push.v.i
                 0xA0000000, // Variable index 0
-                0x840F0001, // PushI.e 1
-                0x0C520000, // Add.v.i
-                0x4525FFFA, // Pop.v.i
+                0xC00F0001, // Push.e 1
+                0x0C520000, // Add.i.v
+                0x4555FFFA, // Pop.v.v
                 0xA0000000, // Variable index 0
-                0xC005FFFA, // Push.v.i
+                0xC005FFFA, // Push.v
                 0xA0000000, // Variable index 0
-                0x840F0001, // PushI.e 1
-                0x0C520000, // Add.v.i
-                0x4525FFFA, // Pop.v.i
+                0xC00F0001, // Push.e 1
+                0x0C520000, // Add.i.v
+                0x4555FFFA, // Pop.v
                 0xA0000000, // Variable index 0
-                0xC005FFFA, // Push.v.i
+                0xC005FFFA, // Push.v
                 0xA0000000, // Variable index 0
-                0x840F0001, // PushI.e 1
-                0x0D520000, // Sub.v.i
-                0x4525FFFA, // Pop.v.i
+                0xC00F0001, // Push.e 1
+                0x0D520000, // Sub.i.v
+                0x4555FFFA, // Pop.v
                 0xA0000000, // Variable index 0
-                0xC005FFFA, // Push.v.i
+                0xC005FFFA, // Push.v
                 0xA0000000, // Variable index 0
-                0x840F0001, // PushI.e 1
-                0x0D520000, // Sub.v.i
-                0x4525FFFA, // Pop.v.i
+                0xC00F0001, // Push.e 1
+                0x0D520000, // Sub.i.v
+                0x4555FFFA, // Pop.v.v
                 0xA0000000, // Variable index 0
             ],
         },

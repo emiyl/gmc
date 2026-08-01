@@ -60,6 +60,10 @@ impl Compiler {
     fn compile_statement(&mut self, statement: &Statement) {
         match statement {
             Statement::Assignment { name, value } => {
+                if self.try_compile_self_update_assignment(name, value) {
+                    return;
+                }
+
                 self.compile_expression(value);
 
                 let var = Variable {
@@ -141,6 +145,52 @@ impl Compiler {
                 }
             }
         }
+    }
+
+    fn try_compile_self_update_assignment(&mut self, name: &str, value: &Expr) -> bool {
+        let (left, operator, right) = match value {
+            Expr::Binary {
+                left,
+                operator,
+                right,
+            } => (left, operator, right),
+            _ => return false,
+        };
+
+        let left_name = match &**left {
+            Expr::Variable(left_name) => left_name,
+            _ => return false,
+        };
+
+        if left_name != name {
+            return false;
+        }
+
+        let is_supported = matches!(operator, BinaryOp::Add | BinaryOp::Sub)
+            && matches!(&**right, Expr::Integer(1));
+        if !is_supported {
+            return false;
+        }
+
+        let var = Variable {
+            name: name.to_string(),
+            var_ref: 0,
+        };
+
+        self.instructions.push(Instruction::Push(var.clone()));
+        self.instructions.push(Instruction::PushE(1));
+        self.instructions.push(Instruction::BinaryOp {
+            lhs_type: ValueType::Var,
+            binary_op: operator.clone(),
+            rhs_type: ValueType::Int32,
+        });
+        self.instructions.push(Instruction::Pop {
+            variable: var,
+            dst_type: ValueType::Var,
+            src_type: ValueType::Var,
+        });
+
+        true
     }
 
     fn compile_expression(&mut self, expr: &Expr) {

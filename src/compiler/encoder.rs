@@ -73,6 +73,18 @@ pub fn encode(instructions: Vec<Instruction>) -> Bytecode {
                 output.write_u32(word);
             }
 
+            Instruction::PushE(value) => {
+                let opcode = Opcode::Push as u16;
+                let instr_type1 = ValueType::Int16 as u8;
+                let instr_type2 = ValueType::Double as u8;
+
+                let value_bytes = value.to_le_bytes();
+                let value_u16 = u16::from_le_bytes(value_bytes);
+
+                let word = Word::new(opcode as u8, instr_type1, instr_type2, value_u16).to_u32();
+                output.write_u32(word);
+            }
+
             Instruction::Push(var) => {
                 let opcode = Opcode::Push as u16;
                 let type1 = ValueType::Var as u8;
