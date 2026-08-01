@@ -73,7 +73,12 @@ impl DataWin {
             sections::room::build(&self.rooms, &mut pool, &layout),
             sections::tpag::build(),
             sections::code::build(&self.code, &mut pool, &layout),
-            sections::vari::build(&self.variables, &mut pool, &layout, self.max_local_var_count),
+            sections::vari::build(
+                &self.variables,
+                &mut pool,
+                &layout,
+                self.max_local_var_count,
+            ),
             sections::func::build(&self.functions, &mut pool, &layout, self.code_locals_count),
             sections::strg::build_placeholder(),
             sections::txtr::build(),
@@ -211,7 +216,9 @@ pub fn build_data_win_from_gmproject(project: GmProject) -> Vec<u8> {
         ..DataWin::default()
     };
 
-    data_win.gen8.room_order = (0..data_win.rooms.len()).map(|index| index as i32).collect();
+    data_win.gen8.room_order = (0..data_win.rooms.len())
+        .map(|index| index as i32)
+        .collect();
 
     data_win.build()
 }
