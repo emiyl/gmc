@@ -1,5 +1,3 @@
-use core::panic;
-
 use super::ast::*;
 use super::lexer::Token::Identifier;
 use super::lexer::{Lexer, Token};
@@ -95,21 +93,164 @@ impl Parser {
         }
     }
 
-    fn parse_assignment(&mut self, name: String) -> Statement {
+    fn parse_while_statement(&mut self) -> Statement {
+        self.advance(); // consume 'while'
+        self.expect(Token::LeftParen);
+        let condition = self.parse_expression();
+        self.expect(Token::RightParen);
+
+        Statement::While {
+            condition,
+            body: Box::new(self.parse_block()),
+        }
+    }
+
+    fn parse_repeat_statement(&mut self) -> Statement {
+        self.advance(); // consume 'repeat'
+        self.expect(Token::LeftParen);
+        let count = self.parse_expression();
+        self.expect(Token::RightParen);
+
+        Statement::Repeat {
+            count,
+            body: Box::new(self.parse_block()),
+        }
+    }
+
+    fn parse_do_until_statement(&mut self) -> Statement {
+        self.advance(); // consume 'do'
+        let body = Box::new(self.parse_block());
+
+        if !self.is_keyword("until") {
+            panic!("Expected 'until' after do-block");
+        }
+
+        self.advance(); // consume 'until'
+        self.expect(Token::LeftParen);
+        let condition = self.parse_expression();
+        self.expect(Token::RightParen);
+        self.expect(Token::Semicolon);
+
+        Statement::DoUntil { body, condition }
+    }
+
+    fn parse_for_statement(&mut self) -> Statement {
+        self.advance(); // consume 'for'
+        self.expect(Token::LeftParen);
+
+        let init = if self.current == Token::Semicolon {
+            self.advance();
+            None
+        } else {
+            let stmt = self.parse_for_clause_statement();
+            self.expect(Token::Semicolon);
+            Some(Box::new(stmt))
+        };
+
+        let condition = if self.current == Token::Semicolon {
+            self.advance();
+            None
+        } else {
+            let expr = self.parse_expression();
+            self.expect(Token::Semicolon);
+            Some(expr)
+        };
+
+        let update = if self.current == Token::RightParen {
+            None
+        } else {
+            Some(Box::new(self.parse_for_clause_statement()))
+        };
+
+        self.expect(Token::RightParen);
+
+        Statement::For {
+            init,
+            condition,
+            update,
+            body: Box::new(self.parse_block()),
+        }
+    }
+
+    fn parse_switch_statement(&mut self) -> Statement {
+        self.advance(); // consume 'switch'
+        self.expect(Token::LeftParen);
+        let value = self.parse_expression();
+        self.expect(Token::RightParen);
+        self.expect(Token::LeftBrace);
+
+        let mut cases = Vec::new();
+        let mut default = None;
+
+        while self.current != Token::RightBrace {
+            if self.is_keyword("case") {
+                self.advance(); // consume 'case'
+                let case_value = self.parse_expression();
+                self.expect(Token::Colon);
+                let body = self.parse_switch_case_body();
+                cases.push((case_value, body));
+                continue;
+            }
+
+            if self.is_keyword("default") {
+                self.advance(); // consume 'default'
+                self.expect(Token::Colon);
+                default = Some(self.parse_switch_case_body());
+                continue;
+            }
+
+            panic!(
+                "Expected 'case' or 'default' in switch block, got {:?}",
+                self.current
+            );
+        }
+
+        self.expect(Token::RightBrace);
+
+        Statement::Switch {
+            value,
+            cases,
+            default,
+        }
+    }
+
+    fn parse_switch_case_body(&mut self) -> Vec<Statement> {
+        let mut statements = Vec::new();
+
+        while self.current != Token::RightBrace
+            && !self.is_keyword("case")
+            && !self.is_keyword("default")
+        {
+            statements.push(self.parse_statement());
+        }
+
+        statements
+    }
+
+    fn parse_assignment(&mut self, name: String, needs_semicolon: bool) -> Statement {
         self.advance(); // consume identifier
         self.expect(Token::Equals);
         let value = self.parse_expression();
-        self.expect(Token::Semicolon);
+        if needs_semicolon {
+            self.expect(Token::Semicolon);
+        }
 
         Statement::Assignment { name, value }
     }
 
-    fn parse_compound_assignment(&mut self, name: String, op: BinaryOp) -> Statement {
+    fn parse_compound_assignment(
+        &mut self,
+        name: String,
+        op: BinaryOp,
+        needs_semicolon: bool,
+    ) -> Statement {
         self.advance(); // consume identifier
         self.advance(); // consume compound assignment token
 
         let right = self.parse_expression();
-        self.expect(Token::Semicolon);
+        if needs_semicolon {
+            self.expect(Token::Semicolon);
+        }
 
         let value = Expr::Binary {
             left: Box::new(Expr::Variable(name.clone())),
@@ -120,10 +261,17 @@ impl Parser {
         Statement::Assignment { name, value }
     }
 
-    fn parse_increment_statement(&mut self, name: String, operator: BinaryOp) -> Statement {
+    fn parse_increment_statement(
+        &mut self,
+        name: String,
+        operator: BinaryOp,
+        needs_semicolon: bool,
+    ) -> Statement {
         self.advance(); // consume identifier
         self.advance(); // consume ++ or --
-        self.expect(Token::Semicolon);
+        if needs_semicolon {
+            self.expect(Token::Semicolon);
+        }
 
         let value = Expr::Binary {
             left: Box::new(Expr::Variable(name.clone())),
@@ -134,7 +282,11 @@ impl Parser {
         Statement::Assignment { name, value }
     }
 
-    fn parse_prefix_increment_statement(&mut self, operator: BinaryOp) -> Statement {
+    fn parse_prefix_increment_statement(
+        &mut self,
+        operator: BinaryOp,
+        needs_semicolon: bool,
+    ) -> Statement {
         self.advance(); // consume ++ or --
 
         let Token::Identifier(name) = &self.current else {
@@ -143,7 +295,9 @@ impl Parser {
         let name = name.clone();
 
         self.advance(); // consume identifier
-        self.expect(Token::Semicolon);
+        if needs_semicolon {
+            self.expect(Token::Semicolon);
+        }
 
         let value = Expr::Binary {
             left: Box::new(Expr::Variable(name.clone())),
@@ -154,10 +308,72 @@ impl Parser {
         Statement::Assignment { name, value }
     }
 
+    fn parse_return_statement(&mut self) -> Statement {
+        self.advance(); // consume 'return'
+
+        if self.current == Token::Semicolon {
+            self.advance();
+            return Statement::Return(None);
+        }
+
+        let expr = self.parse_expression();
+        self.expect(Token::Semicolon);
+        Statement::Return(Some(expr))
+    }
+
+    fn parse_for_clause_statement(&mut self) -> Statement {
+        match self.current {
+            Token::PlusPlus => return self.parse_prefix_increment_statement(BinaryOp::Add, false),
+            Token::MinusMinus => {
+                return self.parse_prefix_increment_statement(BinaryOp::Sub, false);
+            }
+            _ => {}
+        }
+
+        if let Token::Identifier(name) = &self.current {
+            let name = name.clone();
+
+            return match self.peek(1) {
+                Token::Equals => self.parse_assignment(name, false),
+                Token::PlusEquals => self.parse_compound_assignment(name, BinaryOp::Add, false),
+                Token::MinusEquals => self.parse_compound_assignment(name, BinaryOp::Sub, false),
+                Token::AsteriskEquals => self.parse_compound_assignment(name, BinaryOp::Mul, false),
+                Token::SlashEquals => self.parse_compound_assignment(name, BinaryOp::Div, false),
+                Token::PercentEquals => self.parse_compound_assignment(name, BinaryOp::Rem, false),
+                Token::AmpersandEquals => {
+                    self.parse_compound_assignment(name, BinaryOp::And, false)
+                }
+                Token::VerticalBarEquals => {
+                    self.parse_compound_assignment(name, BinaryOp::Or, false)
+                }
+                Token::CaretEquals => self.parse_compound_assignment(name, BinaryOp::Xor, false),
+                Token::ShiftLeftEquals => {
+                    self.parse_compound_assignment(name, BinaryOp::Shl, false)
+                }
+                Token::ShiftRightEquals => {
+                    self.parse_compound_assignment(name, BinaryOp::Shr, false)
+                }
+                Token::PlusPlus => self.parse_increment_statement(name, BinaryOp::Add, false),
+                Token::MinusMinus => self.parse_increment_statement(name, BinaryOp::Sub, false),
+                _ => {
+                    let expr = self.parse_expression();
+                    Statement::Expression(expr)
+                }
+            };
+        }
+
+        let expr = self.parse_expression();
+        Statement::Expression(expr)
+    }
+
+    fn is_keyword(&self, keyword: &str) -> bool {
+        matches!(&self.current, Token::Identifier(value) if value == keyword)
+    }
+
     fn parse_statement(&mut self) -> Statement {
         match self.current {
-            Token::PlusPlus => return self.parse_prefix_increment_statement(BinaryOp::Add),
-            Token::MinusMinus => return self.parse_prefix_increment_statement(BinaryOp::Sub),
+            Token::PlusPlus => return self.parse_prefix_increment_statement(BinaryOp::Add, true),
+            Token::MinusMinus => return self.parse_prefix_increment_statement(BinaryOp::Sub, true),
             _ => {}
         }
 
@@ -166,41 +382,59 @@ impl Parser {
 
             match name.as_str() {
                 "if" => return self.parse_if_statement(),
+                "while" => return self.parse_while_statement(),
+                "repeat" => return self.parse_repeat_statement(),
+                "for" => return self.parse_for_statement(),
+                "do" => return self.parse_do_until_statement(),
+                "switch" => return self.parse_switch_statement(),
+                "break" => {
+                    self.advance();
+                    self.expect(Token::Semicolon);
+                    return Statement::Break;
+                }
+                "continue" => {
+                    self.advance();
+                    self.expect(Token::Semicolon);
+                    return Statement::Continue;
+                }
+                "return" => return self.parse_return_statement(),
                 _ => match self.peek(1) {
-                    Token::Equals => return self.parse_assignment(name),
+                    Token::Equals => return self.parse_assignment(name, true),
                     Token::PlusEquals => {
-                        return self.parse_compound_assignment(name, BinaryOp::Add);
+                        return self.parse_compound_assignment(name, BinaryOp::Add, true);
                     }
                     Token::MinusEquals => {
-                        return self.parse_compound_assignment(name, BinaryOp::Sub);
+                        return self.parse_compound_assignment(name, BinaryOp::Sub, true);
                     }
                     Token::AsteriskEquals => {
-                        return self.parse_compound_assignment(name, BinaryOp::Mul);
+                        return self.parse_compound_assignment(name, BinaryOp::Mul, true);
                     }
                     Token::SlashEquals => {
-                        return self.parse_compound_assignment(name, BinaryOp::Div);
+                        return self.parse_compound_assignment(name, BinaryOp::Div, true);
                     }
                     Token::PercentEquals => {
-                        return self.parse_compound_assignment(name, BinaryOp::Rem);
+                        return self.parse_compound_assignment(name, BinaryOp::Rem, true);
                     }
                     Token::AmpersandEquals => {
-                        return self.parse_compound_assignment(name, BinaryOp::And);
+                        return self.parse_compound_assignment(name, BinaryOp::And, true);
                     }
                     Token::VerticalBarEquals => {
-                        return self.parse_compound_assignment(name, BinaryOp::Or);
+                        return self.parse_compound_assignment(name, BinaryOp::Or, true);
                     }
                     Token::CaretEquals => {
-                        return self.parse_compound_assignment(name, BinaryOp::Xor);
+                        return self.parse_compound_assignment(name, BinaryOp::Xor, true);
                     }
                     Token::ShiftLeftEquals => {
-                        return self.parse_compound_assignment(name, BinaryOp::Shl);
+                        return self.parse_compound_assignment(name, BinaryOp::Shl, true);
                     }
                     Token::ShiftRightEquals => {
-                        return self.parse_compound_assignment(name, BinaryOp::Shr);
+                        return self.parse_compound_assignment(name, BinaryOp::Shr, true);
                     }
-                    Token::PlusPlus => return self.parse_increment_statement(name, BinaryOp::Add),
+                    Token::PlusPlus => {
+                        return self.parse_increment_statement(name, BinaryOp::Add, true);
+                    }
                     Token::MinusMinus => {
-                        return self.parse_increment_statement(name, BinaryOp::Sub);
+                        return self.parse_increment_statement(name, BinaryOp::Sub, true);
                     }
                     Token::LeftParen => {
                         let expr = self.parse_expression();
@@ -456,6 +690,18 @@ impl Parser {
                 },
                 _ => break,
             }
+        }
+
+        if self.current == Token::Question {
+            self.advance();
+            let then_expr = self.parse_expression();
+            self.expect(Token::Colon);
+            let else_expr = self.parse_expression();
+            left = Expr::Ternary {
+                condition: Box::new(left),
+                then_expr: Box::new(then_expr),
+                else_expr: Box::new(else_expr),
+            };
         }
 
         left

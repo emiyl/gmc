@@ -90,7 +90,7 @@ pub fn print_disassembly(bytecode: &Bytecode) {
                         let cmp_type =
                             CmpType::try_from(instr_instance_type).unwrap_or(CmpType::None);
                         format!(
-                            "{opcode:?}.{type2_char}.{type1_char} {cmp_type:?} (pops: [{type2_str}, {type1_str}] -> pushes: [bool]",
+                            "{opcode:?}.{type2_char}.{type1_char} {cmp_type:?} (pops: [{type2_str}, {type1_str}] -> pushes: [bool])",
                             type1_char = type1_print.0,
                             type2_char = type2_print.0,
                             cmp_type = cmp_type,
@@ -144,12 +144,13 @@ pub fn print_disassembly(bytecode: &Bytecode) {
                     }
 
                     Opcode::Branch | Opcode::BranchTrue | Opcode::BranchFalse => {
-                        let offset = instr_instance_type as i32; // Interpret as signed
-                        let target = (pc as i32 + offset * 4) as u32;
+                        let rel_words = ((instr << 9) as i32) >> 9;
+                        let rel_bytes = rel_words * 4;
+                        let target = (pc as i32 + rel_words * 4) as u32;
                         format!(
-                            "{opcode:?} L_{target:04X} (offset: {offset:+})",
+                            "{opcode:?} L_{target:04X} (offset: {rel_bytes:+})",
                             target = target,
-                            offset = offset
+                            rel_bytes = rel_bytes
                         )
                     }
 
@@ -165,7 +166,19 @@ pub fn print_disassembly(bytecode: &Bytecode) {
                         )
                     }
 
-                    _ => format!("{opcode:?} (type1: 0x{instr_type1:X}, type2: 0x{instr_type2:X})"),
+                    Opcode::Ret => {
+                        let return_type = ValueType::try_from(instr_type1 as u8).unwrap();
+                        format!(
+                            "{opcode:?}.{type_char} (pops: [value] -> return)",
+                            type_char = get_type_print(return_type).0
+                        )
+                    }
+
+                    Opcode::Exit => "Exit".to_string(),
+
+                    Opcode::PopZ => {
+                        format!("PopZ (pops: [value])")
+                    }
                 }
             );
         }

@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Statement {
     Assignment {
         name: String,
@@ -9,10 +9,36 @@ pub enum Statement {
         then_branch: Box<Vec<Statement>>,
         else_branch: Option<Box<Vec<Statement>>>,
     },
+    While {
+        condition: Expr,
+        body: Box<Vec<Statement>>,
+    },
+    Repeat {
+        count: Expr,
+        body: Box<Vec<Statement>>,
+    },
+    For {
+        init: Option<Box<Statement>>,
+        condition: Option<Expr>,
+        update: Option<Box<Statement>>,
+        body: Box<Vec<Statement>>,
+    },
+    DoUntil {
+        body: Box<Vec<Statement>>,
+        condition: Expr,
+    },
+    Switch {
+        value: Expr,
+        cases: Vec<(Expr, Vec<Statement>)>,
+        default: Option<Vec<Statement>>,
+    },
+    Break,
+    Continue,
+    Return(Option<Expr>),
     Expression(Expr),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     Integer(i32),
     String(String),
@@ -32,6 +58,12 @@ pub enum Expr {
     Unary {
         operator: UnaryOp,
         operand: Box<Expr>,
+    },
+
+    Ternary {
+        condition: Box<Expr>,
+        then_expr: Box<Expr>,
+        else_expr: Box<Expr>,
     },
 }
 
@@ -56,7 +88,7 @@ pub enum BinaryOp {
     Gt,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UnaryOp {
     Neg,
     Not,

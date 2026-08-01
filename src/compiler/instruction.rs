@@ -42,7 +42,7 @@ pub enum Instruction {
     PushS(String),
     Push(Variable),
 
-    Branch(u16, BranchType),
+    Branch(i32, BranchType),
 
     Pop {
         variable: Variable,
@@ -70,4 +70,8 @@ pub enum Instruction {
         function: Function,
         args_len: usize,
     },
+
+    Ret(ValueType),
+    Exit,
+    PopZ,
 }

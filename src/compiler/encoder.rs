@@ -56,10 +56,49 @@ impl Word {
     }
 }
 
+fn instruction_word_len(instruction: &Instruction) -> usize {
+    match instruction {
+        Instruction::PushI(_) => 1,
+        Instruction::PushE(_) => 1,
+        Instruction::PushS(_) => 2,
+        Instruction::Push(_) => 2,
+        Instruction::Branch(_, _) => 1,
+        Instruction::Pop { .. } => 2,
+        Instruction::BinaryOp { .. } => 1,
+        Instruction::UnaryOp { .. } => 1,
+        Instruction::Conv { .. } => 1,
+        Instruction::Call { .. } => 2,
+        Instruction::Ret(_) => 1,
+        Instruction::Exit => 1,
+        Instruction::PopZ => 1,
+    }
+}
+
+fn encode_branch_word(opcode: Opcode, rel_words: i32) -> u32 {
+    let min = -(1 << 22);
+    let max = (1 << 22) - 1;
+    assert!(
+        rel_words >= min && rel_words <= max,
+        "branch offset out of range: {}",
+        rel_words
+    );
+
+    let offset_bits = (rel_words as u32) & 0x007F_FFFF;
+    ((opcode as u32) << 24) | offset_bits
+}
+
 pub fn encode(instructions: Vec<Instruction>) -> Bytecode {
     let mut output = Bytecode::new();
 
-    for instr in instructions {
+    let mut instruction_word_starts = Vec::with_capacity(instructions.len() + 1);
+    let mut cursor = 0usize;
+    instruction_word_starts.push(cursor);
+    for instruction in &instructions {
+        cursor += instruction_word_len(instruction);
+        instruction_word_starts.push(cursor);
+    }
+
+    for (instruction_index, instr) in instructions.into_iter().enumerate() {
         match instr {
             Instruction::PushI(value) => {
                 let opcode = Opcode::PushI;
@@ -112,8 +151,22 @@ pub fn encode(instructions: Vec<Instruction>) -> Bytecode {
                     BranchType::Unconditional => Opcode::Branch,
                     BranchType::True => Opcode::BranchTrue,
                     BranchType::False => Opcode::BranchFalse,
-                } as u16;
-                let word = Word::new(opcode as u8, 0, 0, offset as u16).to_u32();
+                };
+
+                let target_instruction_index = instruction_index as i32 + offset;
+                assert!(
+                    target_instruction_index >= 0
+                        && target_instruction_index <= instruction_word_starts.len() as i32 - 1,
+                    "invalid branch target index: {}",
+                    target_instruction_index
+                );
+
+                let current_word_index = instruction_word_starts[instruction_index] as i32;
+                let target_word_index =
+                    instruction_word_starts[target_instruction_index as usize] as i32;
+                let rel_words = target_word_index - current_word_index;
+
+                let word = encode_branch_word(opcode, rel_words);
                 output.write_u32(word);
             }
 
@@ -197,13 +250,28 @@ pub fn encode(instructions: Vec<Instruction>) -> Bytecode {
                 let word = Word::new(opcode as u8, type1, type2, args_len as u16).to_u32();
                 output.write_u32(word);
                 output.write_u32(function.var_ref);
+            }
 
-                // PopZ after this
-                let popz_opcode = Opcode::PopZ as u16;
-                let popz_type1 = ValueType::Var as u8;
-                let popz_type2 = ValueType::Double as u8;
-                let popz_word = Word::new(popz_opcode as u8, popz_type1, popz_type2, 0).to_u32();
-                output.write_u32(popz_word);
+            Instruction::Ret(return_type) => {
+                let opcode = Opcode::Ret as u16;
+                let type1 = return_type as u8;
+                let type2 = ValueType::Double as u8;
+                let word = Word::new(opcode as u8, type1, type2, 0).to_u32();
+                output.write_u32(word);
+            }
+
+            Instruction::Exit => {
+                let opcode = Opcode::Exit as u16;
+                let word = Word::new(opcode as u8, 0, 0, 0).to_u32();
+                output.write_u32(word);
+            }
+
+            Instruction::PopZ => {
+                let opcode = Opcode::PopZ as u16;
+                let type1 = ValueType::Var as u8;
+                let type2 = ValueType::Double as u8;
+                let word = Word::new(opcode as u8, type1, type2, 0).to_u32();
+                output.write_u32(word);
             }
         }
     }

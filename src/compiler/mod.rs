@@ -143,6 +143,26 @@ mod tests {
                 0x9E050000, // PopZ
             ],
         },
+        TestCase {
+            input: "for (i = 0; i < 10; i += 1) {}",
+            expected_bytecode: &[
+                0x840F0000, // PushI.e 0
+                0x4525FFFA, // Pop.v.i
+                0xA0000000, // Variable index 0
+                0xC005FFFA, // Push.v.i
+                0xA0000000, // Variable index 0
+                0x840F000A, // PushI.e 10
+                0x15520100, // Cmp.i.v LT
+                0xB8000008, // BranchFalse offset=8
+                0xC005FFFA, // Push.v.i
+                0xA0000000, // Variable index 0
+                0xC00F0001, // Push.e 1
+                0x0C520000, // Add.v.i
+                0x4555FFFA, // Pop.v.v
+                0xA0000000, // Variable index 0
+                0xB67FFFF5, // Branch offset=-44 bytes
+            ],
+        },
     ];
 
     #[test]

@@ -33,6 +33,8 @@ pub enum Token {
     RightAngle,
 
     Equals,
+    Colon,
+    Question,
     Semicolon,
 
     LeftParen,
@@ -168,6 +170,8 @@ impl Lexer {
                 }
             }
             '=' => Token::Equals,
+            ':' => Token::Colon,
+            '?' => Token::Question,
             '!' => Token::Exclamation,
             ';' => Token::Semicolon,
             '(' => Token::LeftParen,

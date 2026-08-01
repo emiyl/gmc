@@ -22,12 +22,12 @@ This will create a project with a room and an object, add the object to the room
 - [x] Function calls
 - [x] Strings
 - [x] Unary operators (`!`, `-`, `~`)
-- [ ] Ternary operator (`?:`)
-- [ ] Loops (`while`, `repeat`, `for`, `do...until`)
-- [ ] `switch` / `case`
-- [ ] `break`
-- [ ] `continue`
-- [ ] `return`
+- [x] Ternary operator (`?:`)
+- [x] Loops (`while`, `repeat`, `for`, `do...until`)
+- [x] `switch` / `case`
+- [x] `break`
+- [x] `continue`
+- [x] `return`
 
 ## Data types
 - [ ] Arrays

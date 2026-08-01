@@ -20,6 +20,8 @@ pub enum Opcode {
     Cmp = 0x15,
     Pop = 0x45,
     PushI = 0x84,
+    Ret = 0x9C,
+    Exit = 0x9D,
     PopZ = 0x9E,
     Branch = 0xB6,
     BranchTrue = 0xB7,
