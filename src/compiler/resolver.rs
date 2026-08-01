@@ -126,6 +126,10 @@ impl Resolver {
                     name: function.name.clone(),
                     var_ref: function.var_ref,
                 }),
+                Instruction::PushFunc(function) => Some(Function {
+                    name: function.name.clone(),
+                    var_ref: function.var_ref,
+                }),
                 _ => None,
             })
             .collect::<Vec<Function>>();

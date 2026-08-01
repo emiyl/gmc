@@ -17,6 +17,8 @@ fn encode_variable(variable: &Variable) -> u16 {
         0xFFFB
     } else if name.starts_with("self.") {
         0xFFFF
+    } else if name.starts_with("builtin.") {
+        0xFFF1
     } else {
         0xFFFA
     };

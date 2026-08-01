@@ -70,6 +70,8 @@ pub struct Compiler {
     struct_instance_vars: HashSet<String>,
     struct_literal_fields: HashMap<String, Vec<(String, Expr)>>,
     struct_name_prefix: String,
+    declared_functions: HashMap<String, String>,
+    function_parameters: HashMap<String, String>,
     break_scopes: Vec<Vec<usize>>,
     loop_scopes: Vec<LoopScope>,
     temp_counter: u32,
@@ -83,6 +85,8 @@ impl Compiler {
             struct_instance_vars: HashSet::new(),
             struct_literal_fields: HashMap::new(),
             struct_name_prefix: String::new(),
+            declared_functions: HashMap::new(),
+            function_parameters: HashMap::new(),
             break_scopes: Vec::new(),
             loop_scopes: Vec::new(),
             temp_counter: 0,
@@ -380,6 +384,22 @@ impl Compiler {
         self.instructions.push(Instruction::PopZ);
     }
 
+    pub fn compile_function_body(&mut self, params: &[FunctionParameter], body: &[Statement]) {
+        let previous_function_parameters = std::mem::take(&mut self.function_parameters);
+
+        for (index, param) in params.iter().enumerate() {
+            let arg_name = format!("builtin.argument{}", index);
+            self.function_parameters
+                .insert(param.name.clone(), arg_name);
+        }
+
+        for statement in body {
+            self.compile_statement(statement);
+        }
+
+        self.function_parameters = previous_function_parameters;
+    }
+
     fn compile_expression_statement_with_discard(&mut self, expr: &Expr) {
         self.compile_expression(expr);
         self.emit_popz();
@@ -423,16 +443,25 @@ impl Compiler {
 
     fn compile_statement(&mut self, statement: &Statement) {
         match statement {
-            Statement::FunctionDeclaration { name, params, body } => {
-                let function_name = format!("__gmlc_fn_{}", name);
-                let function_expr = Expr::Function {
-                    name: Some(name.clone()),
-                    params: params.clone(),
-                    body: body.clone(),
-                };
-                self.compile_expression(&function_expr);
+            Statement::FunctionDeclaration { name, .. } => {
+                let script_name = format!("gml_Script_{}@{}", name, self.struct_name_prefix);
+                self.declared_functions
+                    .insert(name.clone(), script_name.clone());
+
+                self.instructions.push(Instruction::PushFunc(Function {
+                    name: script_name.clone(),
+                    var_ref: 0,
+                }));
+                self.emit_conv_if_needed(ValueType::Int32, ValueType::Var);
+
+                self.instructions.push(Instruction::PushI(-1));
+                self.emit_conv_if_needed(ValueType::Int16, ValueType::Var);
+
+                self.emit_call("method", 2);
+                self.instructions.push(Instruction::Dup(ValueType::Var));
+
                 let var = Variable {
-                    name: function_name.clone(),
+                    name: format!("self.{}", name),
                     var_ref: 0xA000_0000,
                 };
                 self.instructions.push(Instruction::Pop {
@@ -752,8 +781,13 @@ impl Compiler {
             }
 
             Expr::Variable(name) => {
+                let resolved_name = self
+                    .function_parameters
+                    .get(name)
+                    .cloned()
+                    .unwrap_or_else(|| name.clone());
                 let var = Variable {
-                    name: name.clone(),
+                    name: resolved_name,
                     var_ref: 0xA000_0000,
                 };
 
@@ -836,8 +870,8 @@ impl Compiler {
                 }
             }
 
-            Expr::Function { .. } => {
-                let function_name = self.next_temp_name("fn");
+            Expr::Function { name, .. } => {
+                let function_name = name.clone().unwrap_or_else(|| self.next_temp_name("fn"));
                 self.instructions.push(Instruction::PushFunc(Function {
                     name: function_name,
                     var_ref: 0,
@@ -914,8 +948,13 @@ impl Compiler {
                     self.emit_conv_if_needed(value_type_from_expr(arg.expr()), ValueType::Var);
                 }
 
+                let func_name = self
+                    .declared_functions
+                    .get(name)
+                    .cloned()
+                    .unwrap_or_else(|| name.clone());
                 let func = Function {
-                    name: name.clone(),
+                    name: func_name,
                     var_ref: 0,
                 };
 

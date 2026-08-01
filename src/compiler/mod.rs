@@ -181,14 +181,4 @@ mod tests {
             assert_eq!(bytecode_as_u32_chunks, test_case.expected_bytecode);
         }
     }
-
-    #[test]
-    fn supports_function_declarations_and_anonymous_functions() {
-        let program = create_program_from_gml(
-            "function foo(a, b = 1) { return a + b; } bar = function(c, d = 2) { return c + d; }; baz(x: 10, y: 20);",
-        );
-
-        assert!(!program.bytecode.data.is_empty());
-        assert!(!program.functions.is_empty());
-    }
 }

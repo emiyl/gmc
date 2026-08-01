@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::compiler::{
-    ast::Statement,
+    ast::{FunctionParameter, Statement},
     compiler::{Compiler, StructConstructor},
     disassembler::print_disassembly,
     lexer::Lexer,
@@ -14,6 +14,52 @@ use crate::data_win::model::{
 };
 use crate::project::resources::gm_room_layer::LayerTrait;
 use crate::project::{CodeEntry, CodeOwner, GmObject, GmRoom};
+
+fn collect_function_declarations(
+    statements: &[Statement],
+    declarations: &mut Vec<(String, Vec<FunctionParameter>, Vec<Statement>)>,
+) {
+    for statement in statements {
+        match statement {
+            Statement::FunctionDeclaration {
+                name, params, body, ..
+            } => {
+                declarations.push((name.clone(), params.clone(), body.clone()));
+            }
+            Statement::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                collect_function_declarations(then_branch, declarations);
+                if let Some(else_branch) = else_branch {
+                    collect_function_declarations(else_branch, declarations);
+                }
+            }
+            Statement::While { body, .. } => {
+                collect_function_declarations(body, declarations);
+            }
+            Statement::Repeat { body, .. } => {
+                collect_function_declarations(body, declarations);
+            }
+            Statement::For { body, .. } => {
+                collect_function_declarations(body, declarations);
+            }
+            Statement::DoUntil { body, .. } => {
+                collect_function_declarations(body, declarations);
+            }
+            Statement::Switch { cases, default, .. } => {
+                for (_, body) in cases {
+                    collect_function_declarations(body, declarations);
+                }
+                if let Some(default_body) = default {
+                    collect_function_declarations(default_body, declarations);
+                }
+            }
+            _ => {}
+        }
+    }
+}
 
 pub fn compile_code_entry(
     entry: &CodeEntry,
@@ -49,6 +95,26 @@ pub fn compile_code_entry(
     compiled.string_fixups = program.bytecode.string_fixups;
 
     let mut compiled_entries = vec![compiled];
+
+    let mut function_declarations = Vec::new();
+    collect_function_declarations(&program_ast, &mut function_declarations);
+    for (name, params, body) in function_declarations {
+        let script_name = format!("gml_Script_{}@{}", name, entry.name);
+        let mut script_compiler = Compiler::with_struct_name_prefix(entry.name.clone());
+        script_compiler.compile_function_body(&params, &body);
+        let script_program = resolver.resolve(script_compiler.instructions);
+        let mut script_entry = CompiledCodeEntry::new(
+            CompiledCodeOwner::Script {
+                name: script_name.clone(),
+            },
+            script_name.clone(),
+            script_program.bytecode.data,
+        );
+        script_entry.string_fixups = script_program.bytecode.string_fixups;
+        script_entry.arguments_count = params.len() as u16;
+        compiled_entries.push(script_entry);
+    }
+
     if matches!(entry.owner, CodeOwner::ObjectEvent { .. }) {
         for constructor in struct_constructors {
             compiled_entries.extend(compile_struct_constructor_entries(&constructor, resolver));
@@ -207,5 +273,30 @@ pub fn compile_object(
         event_type_count: 15,
         physics_vertices,
         event_lists,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::project::CodeEntry;
+
+    #[test]
+    fn function_declaration_script_entries_record_argument_count() {
+        let entry = CodeEntry::new_script(
+            "test",
+            "function print(message) { show_debug_message(message); } print(\"hello\");",
+        );
+        let object_id_by_name = HashMap::new();
+        let mut resolver = Resolver::new();
+
+        let compiled_entries = compile_code_entry(&entry, &object_id_by_name, &mut resolver);
+
+        let function_script = compiled_entries
+            .iter()
+            .find(|entry| entry.name == "gml_Script_print@test")
+            .expect("function declaration script entry must be emitted");
+
+        assert_eq!(function_script.arguments_count, 1);
     }
 }

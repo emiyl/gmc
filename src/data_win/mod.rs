@@ -9,7 +9,7 @@ mod string_pool;
 use std::collections::HashMap;
 
 use crate::compiler::Program;
-use crate::compiler::resolver::Resolver;
+use crate::compiler::resolver::{Resolver, Variable as ResolvedVariable};
 use crate::data_win::chunk::ChunkBuilder;
 use crate::data_win::compile::{compile_code_entry, compile_object, compile_room};
 use crate::data_win::finalize::build_form;
@@ -109,7 +109,14 @@ pub fn build_data_win(code_name: &str, program: Program) -> Vec<u8> {
             .variables
             .into_iter()
             .enumerate()
-            .map(|(index, variable)| CompiledVariable::with_name(variable.name, index as i32))
+            .map(|(index, variable)| {
+                let mut compiled = CompiledVariable::with_name(variable.name, index as i32);
+                if compiled.name.starts_with("builtin.") {
+                    compiled.name = strip_scope_prefix(&compiled.name);
+                    compiled.instance_type = -6;
+                }
+                compiled
+            })
             .collect(),
         functions: program
             .functions
@@ -168,13 +175,8 @@ pub fn build_data_win_from_gmproject(project: GmProject) -> Vec<u8> {
     let mut resolved_variables = resolver.variables.values().cloned().collect::<Vec<_>>();
     resolved_variables.sort_by_key(|variable| variable.var_ref);
     let variables = resolved_variables
-        .into_iter()
-        .map(|variable| {
-            CompiledVariable::with_name(
-                strip_scope_prefix(&variable.name),
-                variable.var_ref as i32,
-            )
-        })
+        .iter()
+        .map(resolved_variable_to_compiled)
         .collect::<Vec<_>>();
 
     let mut resolved_functions = resolver.functions.values().cloned().collect::<Vec<_>>();
@@ -228,4 +230,18 @@ fn strip_scope_prefix(name: &str) -> String {
         .or_else(|| name.strip_prefix("builtin."))
         .unwrap_or(name)
         .to_string()
+}
+
+fn resolved_variable_to_compiled(variable: &ResolvedVariable) -> CompiledVariable {
+    let mut compiled = CompiledVariable::with_name(
+        strip_scope_prefix(&variable.name),
+        variable.var_ref as i32,
+    );
+
+    // BC17+ resolves argumentN and other builtins by name when instanceType is -6.
+    if variable.name.starts_with("builtin.") {
+        compiled.instance_type = -6;
+    }
+
+    compiled
 }
