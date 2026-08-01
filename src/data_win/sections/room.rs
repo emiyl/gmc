@@ -77,6 +77,11 @@ pub fn build(rooms: &[CompiledRoom], pool: &mut StringPool, layout: &WadLayout) 
             chunk.i32(0);
             chunk.u32(0xFFFF_FFFF);
             chunk.f32(0.0);
+
+            // WAD16+ stores preCreateCode after rotation.
+            if layout.wad_version >= 16 {
+                chunk.i32(-1);
+            }
         }
 
         let tiles_start = chunk.pos();
