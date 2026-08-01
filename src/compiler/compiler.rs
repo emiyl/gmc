@@ -179,76 +179,61 @@ impl Compiler {
         format!("__gmlc_{}_{}", prefix, id)
     }
 
-    fn make_array_variable(&self, name: &str, var_ref: u32) -> Variable {
-        Variable {
-            name: name.to_string(),
-            var_ref,
-        }
-    }
-
     fn emit_stacktop_marker(&mut self) {
         self.instructions.push(Instruction::PushI(-1));
     }
 
-    fn collect_array_literal_values(expr: &Expr, values: &mut Vec<Expr>) -> bool {
+    fn collect_array_access_chain(expr: &Expr, indices: &mut Vec<Expr>) -> Option<String> {
         match expr {
-            Expr::Call { name, args } if name == "array_set" && args.len() == 3 => {
-                if Self::collect_array_literal_values(&args[0], values) {
-                    values.push(args[2].clone());
-                    true
-                } else {
-                    false
-                }
+            Expr::Call { name, args } if name == "array_get" && args.len() == 2 => {
+                indices.push(args[1].clone());
+                Self::collect_array_access_chain(&args[0], indices)
             }
-            Expr::Call { name, args } if name == "array_create" && args.len() == 2 => true,
-            _ => false,
+            Expr::Variable(name) => Some(name.clone()),
+            _ => None,
         }
     }
 
-    fn compile_array_literal_chain(&mut self, expr: &Expr) -> bool {
-        let mut values = Vec::new();
-        if !Self::collect_array_literal_values(expr, &mut values) {
+    fn compile_array_read_call(&mut self, expr: &Expr) -> bool {
+        let mut reversed_indices = Vec::new();
+        let Some(base_name) = Self::collect_array_access_chain(expr, &mut reversed_indices) else {
+            return false;
+        };
+
+        if reversed_indices.is_empty() {
             return false;
         }
 
-        if values.is_empty() {
-            return false;
-        }
+        let mut indices = reversed_indices;
+        indices.reverse();
 
-        let temp_name = self.next_temp_name("array");
-        let array_write_var = self.make_array_variable(&temp_name, 0);
-        let array_read_var = self.make_array_variable(&temp_name, 0xA000_0000);
-
-        for (index, value) in values.into_iter().enumerate() {
-            self.compile_expression(&value);
+        if indices.len() == 1 {
             self.emit_stacktop_marker();
-            self.instructions.push(Instruction::PushI(index as i32));
-            self.instructions.push(Instruction::Pop {
-                variable: array_write_var.clone(),
-                dst_type: ValueType::Var,
-                src_type: value_type_from_expr(&value),
-            });
+            self.compile_expression(&indices[0]);
+            self.instructions.push(Instruction::Push(Variable {
+                name: base_name,
+                var_ref: 0,
+            }));
+            return true;
         }
 
-        self.instructions.push(Instruction::Push(array_read_var));
-        true
-    }
-
-    fn compile_array_read_call(&mut self, args: &[Expr]) -> bool {
-        let [base, index] = args else {
-            return false;
-        };
-
-        let Expr::Variable(base_name) = base else {
-            return false;
-        };
-
-        self.emit_stacktop_marker();
-        self.compile_expression(index);
+        // Emit the BC17+ multidimensional access chain used by the native compiler:
+        // push owner marker, first index, base array, then PUSHAC* and final PUSHAF.
+        self.instructions.push(Instruction::PushI(-6));
+        self.compile_expression(&indices[0]);
         self.instructions.push(Instruction::Push(Variable {
-            name: base_name.clone(),
+            name: base_name,
             var_ref: 0,
         }));
+
+        for index in indices.iter().take(indices.len() - 1).skip(1) {
+            self.compile_expression(index);
+            self.instructions.push(Instruction::Break(-4));
+        }
+
+        self.compile_expression(&indices[indices.len() - 1]);
+        self.instructions.push(Instruction::Break(-2));
+
         true
     }
 
@@ -629,15 +614,11 @@ impl Compiler {
             }
 
             Expr::Call { name, args } => {
-                if name == "array_set" && self.compile_array_literal_chain(expr) {
+                if name == "array_get" && self.compile_array_read_call(expr) {
                     return;
                 }
 
-                if name == "array_get" && self.compile_array_read_call(args) {
-                    return;
-                }
-
-                for arg in args {
+                for arg in args.iter().rev() {
                     self.compile_expression(arg);
                     self.emit_conv_if_needed(value_type_from_expr(arg), ValueType::Var);
                 }

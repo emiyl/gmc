@@ -71,6 +71,8 @@ pub enum Instruction {
         args_len: usize,
     },
 
+    Break(i16),
+
     Ret(ValueType),
     Exit,
     PopZ,

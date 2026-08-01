@@ -166,6 +166,26 @@ pub fn print_disassembly(bytecode: &Bytecode) {
                         )
                     }
 
+                    Opcode::Break => {
+                        let sub = i16::from_le_bytes(instr_instance_type.to_le_bytes());
+                        let name = match sub {
+                            -1 => "chkindex",
+                            -2 => "pushaf",
+                            -3 => "popaf",
+                            -4 => "pushac",
+                            -5 => "setowner",
+                            -6 => "isstaticok",
+                            -7 => "setstatic",
+                            -8 => "savearef",
+                            -9 => "restorearef",
+                            -10 => "isnullish",
+                            -11 => "pushref",
+                            _ => "unknown",
+                        };
+
+                        format!("Break.{name}.e ({sub})")
+                    }
+
                     Opcode::Ret => {
                         let return_type = ValueType::try_from(instr_type1 as u8).unwrap();
                         format!(

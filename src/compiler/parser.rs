@@ -357,15 +357,47 @@ impl Parser {
 
         self.expect(Token::RightBracket);
 
-        let mut expr = self.build_call(
-            "array_create",
-            vec![Expr::Integer(values.len() as i32), Expr::Integer(0)],
-        );
+        self.build_call("@@NewGMLArray@@", values)
+    }
 
-        for (index, value) in values.into_iter().enumerate() {
-            expr = self.build_call("array_set", vec![expr, Expr::Integer(index as i32), value]);
+    fn parse_struct_literal(&mut self) -> Expr {
+        self.expect(Token::LeftBrace);
+
+        let mut expr = self.build_call("__gmlc_struct_create", vec![]);
+
+        if self.current != Token::RightBrace {
+            loop {
+                let key = match &self.current {
+                    Token::Identifier(name) => {
+                        let key = name.clone();
+                        self.advance();
+                        key
+                    }
+                    Token::StringLiteral(value) => {
+                        let key = value.clone();
+                        self.advance();
+                        key
+                    }
+                    _ => panic!("Expected identifier or string literal in struct literal"),
+                };
+
+                self.expect(Token::Colon);
+                let value = self.parse_expression();
+
+                expr = self.build_call("variable_struct_set", vec![expr, Expr::String(key), value]);
+
+                if self.current == Token::Comma {
+                    self.advance();
+                    if self.current == Token::RightBrace {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
         }
 
+        self.expect(Token::RightBrace);
         expr
     }
 
@@ -1042,6 +1074,11 @@ impl Parser {
 
             Token::LeftBracket => {
                 let expr = self.parse_array_literal();
+                self.parse_postfix(expr)
+            }
+
+            Token::LeftBrace => {
+                let expr = self.parse_struct_literal();
                 self.parse_postfix(expr)
             }
 

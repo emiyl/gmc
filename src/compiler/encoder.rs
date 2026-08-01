@@ -68,6 +68,7 @@ fn instruction_word_len(instruction: &Instruction) -> usize {
         Instruction::UnaryOp { .. } => 1,
         Instruction::Conv { .. } => 1,
         Instruction::Call { .. } => 2,
+        Instruction::Break(_) => 1,
         Instruction::Ret(_) => 1,
         Instruction::Exit => 1,
         Instruction::PopZ => 1,
@@ -250,6 +251,15 @@ pub fn encode(instructions: Vec<Instruction>) -> Bytecode {
                 let word = Word::new(opcode as u8, type1, type2, args_len as u16).to_u32();
                 output.write_u32(word);
                 output.write_u32(function.var_ref);
+            }
+
+            Instruction::Break(sub_opcode) => {
+                let opcode = Opcode::Break as u16;
+                let type1 = ValueType::Int16 as u8;
+                let type2 = ValueType::Double as u8;
+                let sub_opcode_u16 = u16::from_le_bytes(sub_opcode.to_le_bytes());
+                let word = Word::new(opcode as u8, type1, type2, sub_opcode_u16).to_u32();
+                output.write_u32(word);
             }
 
             Instruction::Ret(return_type) => {

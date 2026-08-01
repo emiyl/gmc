@@ -28,6 +28,7 @@ pub enum Opcode {
     BranchFalse = 0xB8,
     Push = 0xC0,
     Call = 0xD9,
+    Break = 0xFF,
 }
 
 pub struct Bytecode {
