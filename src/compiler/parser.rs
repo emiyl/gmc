@@ -1270,6 +1270,17 @@ impl Parser {
                 self.parse_postfix(expr)
             }
 
+            Token::CommentSingleLine => {
+                self.advance();
+                while self.current != Token::EOF && self.current != Token::Semicolon {
+                    self.advance();
+                }
+                if self.current == Token::Semicolon {
+                    self.advance();
+                }
+                self.parse_primary()
+            }
+
             _ => panic!("Unexpected token {:?}", self.current),
         }
     }

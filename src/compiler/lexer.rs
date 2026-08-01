@@ -47,6 +47,8 @@ pub enum Token {
     RightBrace,
     Comma,
 
+    CommentSingleLine,
+
     EOF,
 }
 
@@ -85,11 +87,20 @@ impl Lexer {
                 }
             }
             '/' => {
-                if self.peek_char(1) == Some('=') {
-                    self.position += 1;
-                    Token::SlashEquals
-                } else {
-                    Token::Slash
+                match self.peek_char(1) {
+                    Some('/') => {
+                        // Consume the rest of the line as a comment.
+                        while self.position < self.input.len() && self.input[self.position] != '\n'
+                        {
+                            self.position += 1;
+                        }
+                        Token::CommentSingleLine
+                    }
+                    Some('=') => {
+                        self.position += 1;
+                        Token::SlashEquals
+                    }
+                    _ => Token::Slash,
                 }
             }
             '%' => {
