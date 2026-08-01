@@ -45,7 +45,8 @@ struct PipelineArgs {
     add_objects_to_room: Vec<String>,
 
     /// Add an event to an object in the in-memory project. Repeatable.
-    /// Example: --add-event Object1 create 0 "x += 1;"
+    /// Example (inline): --add-event Object1 create 0 "x += 1;"
+    /// Example (file): --add-event Object1 create 0 ./scripts/init.gml
     #[arg(
         long = "add-event",
         value_names = ["OBJECT", "EVENT_TYPE", "EVENT_SUBTYPE", "CODE"],
@@ -176,12 +177,20 @@ fn run_pipeline(pipeline: PipelineArgs) {
 
         object.add_event(event_type, event_subtype.clone());
 
+        let event_code = match resolve_event_code_arg(&chunk[3]) {
+            Ok(code) => code,
+            Err(error) => {
+                eprintln!("{}", error);
+                return;
+            }
+        };
+
         // Keep event code in-memory so pipeline compile can include it without writing project files.
         project.code.push(project::CodeEntry::new_object_event(
             object_name,
             event_type,
             event_subtype,
-            &chunk[3],
+            &event_code,
         ));
     }
 
@@ -205,6 +214,15 @@ fn run_pipeline(pipeline: PipelineArgs) {
 
     if !wants_compile_output && !wants_save_project {
         println!("Pipeline completed in memory (no disk output requested).");
+    }
+}
+
+fn resolve_event_code_arg(value: &str) -> Result<String, String> {
+    if value.to_ascii_lowercase().ends_with(".gml") {
+        std::fs::read_to_string(value)
+            .map_err(|error| format!("Failed to read .gml event code file '{}': {}", value, error))
+    } else {
+        Ok(value.to_string())
     }
 }
 

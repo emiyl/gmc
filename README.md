@@ -13,7 +13,7 @@ gmlc --create Project \
     --compile ./data.win
 ```
 
-This will create a project with a room and an object, add the object to the room, and add a Create event to the object that shows a debug message.
+This will create a project with a room and an object, add the object to the room, and add a Create event to the object that shows a debug message. You can also use a .gml file for the event code instead of a string.
 
 ## Core language
 - [x] Variable assignments
