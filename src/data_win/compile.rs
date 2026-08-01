@@ -45,11 +45,7 @@ pub fn compile_code_entry(
         },
     };
 
-    CompiledCodeEntry {
-        owner,
-        name: entry.name.clone(),
-        bytecode: program.bytecode.data,
-    }
+    CompiledCodeEntry::new(owner, entry.name.clone(), program.bytecode.data)
 }
 
 pub fn compile_room(room: GmRoom, object_id_by_name: &HashMap<String, u32>) -> CompiledRoom {
@@ -70,7 +66,7 @@ pub fn compile_room(room: GmRoom, object_id_by_name: &HashMap<String, u32>) -> C
                 object_id: object_id_by_name.get(&object_name).copied().unwrap_or(0),
                 x: instance.x,
                 y: instance.y,
-                creation_code_id: -1,
+                ..CompiledInstance::default()
             }
         })
         .collect::<Vec<_>>();
@@ -144,6 +140,7 @@ pub fn compile_object(
         physics_sensor: object.physics_sensor,
         physics_shape: object.physics_shape,
         physics_start_awake: object.physics_start_awake,
+        event_type_count: 15,
         physics_vertices,
         event_lists,
     }

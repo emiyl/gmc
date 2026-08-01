@@ -3,7 +3,7 @@ use crate::data_win::model::{CompiledEventAction, CompiledObject};
 use crate::data_win::string_pool::StringPool;
 
 pub fn build(objects: &[CompiledObject], pool: &mut StringPool) -> ChunkBuilder {
-    const EVENT_TYPE_COUNT: usize = 15;
+    const MAX_EVENT_TYPE_SLOTS: usize = 15;
 
     let mut chunk = ChunkBuilder::new("OBJT");
 
@@ -44,8 +44,9 @@ pub fn build(objects: &[CompiledObject], pool: &mut StringPool) -> ChunkBuilder 
             chunk.f32(vertex.y);
         }
 
-        chunk.u32(EVENT_TYPE_COUNT as u32);
-        let outer_ptrs = (0..EVENT_TYPE_COUNT)
+        let event_type_slots = object.event_type_count.min(MAX_EVENT_TYPE_SLOTS as u32) as usize;
+        chunk.u32(event_type_slots as u32);
+        let outer_ptrs = (0..event_type_slots)
             .map(|_| chunk.local_ref_placeholder())
             .collect::<Vec<_>>();
 

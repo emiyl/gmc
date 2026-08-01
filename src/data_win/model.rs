@@ -20,6 +20,11 @@ pub struct Gen8 {
     pub steam_app_id: i32,
     pub debugger_port: u32,
     pub room_order: Vec<i32>,
+    pub gms2_first_random: u64,
+    pub gms2_random_uid: [u64; 4],
+    pub gms2_fps: f32,
+    pub gms2_allow_statistics: bool,
+    pub gms2_game_guid: [u8; 16],
 }
 
 impl Default for Gen8 {
@@ -45,12 +50,19 @@ impl Default for Gen8 {
             steam_app_id: 0,
             debugger_port: 0,
             room_order: vec![0],
+            gms2_first_random: 0,
+            gms2_random_uid: [0; 4],
+            gms2_fps: 60.0,
+            gms2_allow_statistics: false,
+            gms2_game_guid: [0; 16],
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Optn {
+    pub shader_extension_flag: u32,
+    pub shader_ext_version: i32,
     pub info: u64,
     pub scale: i32,
     pub window_color: u32,
@@ -69,6 +81,8 @@ pub struct Optn {
 impl Default for Optn {
     fn default() -> Self {
         Self {
+            shader_extension_flag: 0x8000_0000,
+            shader_ext_version: 1,
             info: 0x10,
             scale: 0,
             window_color: 0,
@@ -103,6 +117,22 @@ pub struct CompiledCodeEntry {
     pub owner: CompiledCodeOwner,
     pub name: String,
     pub bytecode: Vec<u8>,
+    pub locals_count: u16,
+    pub arguments_count: u16,
+    pub offset: u32,
+}
+
+impl CompiledCodeEntry {
+    pub fn new(owner: CompiledCodeOwner, name: String, bytecode: Vec<u8>) -> Self {
+        Self {
+            owner,
+            name,
+            bytecode,
+            locals_count: 0,
+            arguments_count: 0,
+            offset: 0,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -112,6 +142,32 @@ pub struct CompiledInstance {
     pub x: f32,
     pub y: f32,
     pub creation_code_id: i32,
+    pub scale_x: f32,
+    pub scale_y: f32,
+    pub image_speed: f32,
+    pub image_index: i32,
+    pub color: u32,
+    pub rotation: f32,
+    pub pre_create_code: i32,
+}
+
+impl Default for CompiledInstance {
+    fn default() -> Self {
+        Self {
+            id: 0,
+            object_id: 0,
+            x: 0.0,
+            y: 0.0,
+            creation_code_id: -1,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            image_speed: 1.0,
+            image_index: 0,
+            color: 0xFFFF_FFFF,
+            rotation: 0.0,
+            pre_create_code: -1,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -134,6 +190,10 @@ pub struct CompiledRoom {
     pub gravity_x: f32,
     pub gravity_y: f32,
     pub meters_per_pixel: f32,
+    pub background_entry_count: u32,
+    pub view_entry_count: u32,
+    pub tile_entry_count: u32,
+    pub layer_entry_count: u32,
     pub instances: Vec<CompiledInstance>,
 }
 
@@ -158,6 +218,10 @@ impl Default for CompiledRoom {
             gravity_x: 0.0,
             gravity_y: 10.0,
             meters_per_pixel: 0.1,
+            background_entry_count: 0,
+            view_entry_count: 0,
+            tile_entry_count: 0,
+            layer_entry_count: 0,
             instances: Vec::new(),
         }
     }
@@ -215,6 +279,45 @@ pub struct CompiledObject {
     pub physics_sensor: bool,
     pub physics_shape: i32,
     pub physics_start_awake: bool,
+    pub event_type_count: u32,
     pub physics_vertices: Vec<PhysicsVertex>,
     pub event_lists: [Vec<CompiledEvent>; 15],
+}
+
+#[derive(Debug, Clone)]
+pub struct CompiledVariable {
+    pub name: String,
+    pub instance_type: i32,
+    pub var_id: i32,
+    pub occurrences: u32,
+    pub first_address: i32,
+}
+
+impl CompiledVariable {
+    pub fn with_name(name: String, var_id: i32) -> Self {
+        Self {
+            name,
+            instance_type: 0,
+            var_id,
+            occurrences: 0,
+            first_address: -1,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CompiledFunction {
+    pub name: String,
+    pub occurrences: u32,
+    pub first_address: i32,
+}
+
+impl CompiledFunction {
+    pub fn with_name(name: String) -> Self {
+        Self {
+            name,
+            occurrences: 0,
+            first_address: -1,
+        }
+    }
 }

@@ -1,22 +1,28 @@
 use crate::data_win::chunk::ChunkBuilder;
 use crate::data_win::layout::WadLayout;
+use crate::data_win::model::CompiledFunction;
 use crate::data_win::string_pool::StringPool;
 
-pub fn build(function_names: &[String], pool: &mut StringPool, layout: &WadLayout) -> ChunkBuilder {
+pub fn build(
+    functions: &[CompiledFunction],
+    pool: &mut StringPool,
+    layout: &WadLayout,
+    code_locals_count: u32,
+) -> ChunkBuilder {
     let mut chunk = ChunkBuilder::new("FUNC");
 
     if !layout.old_code_format {
-        chunk.u32(function_names.len() as u32);
+        chunk.u32(functions.len() as u32);
     }
 
-    for name in function_names {
-        chunk.str_ref(pool, name);
-        chunk.u32(0);
-        chunk.i32(-1);
+    for function in functions {
+        chunk.str_ref(pool, &function.name);
+        chunk.u32(function.occurrences);
+        chunk.i32(function.first_address);
     }
 
     if !layout.old_code_format {
-        chunk.u32(0);
+        chunk.u32(code_locals_count);
     }
 
     chunk

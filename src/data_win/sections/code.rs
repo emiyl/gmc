@@ -35,11 +35,12 @@ pub fn build(
 
         chunk.str_ref(pool, &entry.name);
         chunk.u32(entry.bytecode.len() as u32);
-        chunk.u16(0);
-        chunk.u16(0);
+        chunk.u16(entry.locals_count);
+        chunk.u16(entry.arguments_count);
         let rel_addr_field = chunk.pos();
+        // Placeholder for bytecodeRelAddr; patched after bytecode bytes are appended.
         chunk.i32(0);
-        chunk.u32(0);
+        chunk.u32(entry.offset);
         rel_addr_positions.push(rel_addr_field);
     }
 

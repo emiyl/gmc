@@ -51,10 +51,10 @@ pub fn build(rooms: &[CompiledRoom], pool: &mut StringPool, layout: &WadLayout) 
         }
 
         let backgrounds_start = chunk.pos();
-        chunk.u32(0);
+        chunk.u32(room.background_entry_count);
 
         let views_start = chunk.pos();
-        chunk.u32(0);
+        chunk.u32(room.view_entry_count);
 
         let game_objects_start = chunk.pos();
         chunk.u32(room.instances.len() as u32);
@@ -71,21 +71,21 @@ pub fn build(rooms: &[CompiledRoom], pool: &mut StringPool, layout: &WadLayout) 
             chunk.i32(instance.object_id as i32);
             chunk.u32(instance.id);
             chunk.i32(instance.creation_code_id);
-            chunk.f32(1.0);
-            chunk.f32(1.0);
-            chunk.f32(1.0);
-            chunk.i32(0);
-            chunk.u32(0xFFFF_FFFF);
-            chunk.f32(0.0);
+            chunk.f32(instance.scale_x);
+            chunk.f32(instance.scale_y);
+            chunk.f32(instance.image_speed);
+            chunk.i32(instance.image_index);
+            chunk.u32(instance.color);
+            chunk.f32(instance.rotation);
 
             // WAD16+ stores preCreateCode after rotation.
             if layout.wad_version >= 16 {
-                chunk.i32(-1);
+                chunk.i32(instance.pre_create_code);
             }
         }
 
         let tiles_start = chunk.pos();
-        chunk.u32(0);
+        chunk.u32(room.tile_entry_count);
 
         chunk.local_ref_set(backgrounds_pos, backgrounds_start);
         chunk.local_ref_set(views_pos, views_start);
@@ -94,7 +94,7 @@ pub fn build(rooms: &[CompiledRoom], pool: &mut StringPool, layout: &WadLayout) 
 
         if let Some(layers_pos) = layers_pos {
             let layers_start = chunk.pos();
-            chunk.u32(0);
+            chunk.u32(room.layer_entry_count);
             chunk.local_ref_set(layers_pos, layers_start);
         }
     }

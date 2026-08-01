@@ -12,7 +12,6 @@ pub use resources::{
 };
 
 pub use crate::project::resources::CodeOwner;
-use crate::project::resources::event_type;
 
 #[derive(Debug, Clone)]
 pub struct GmProject {
@@ -236,9 +235,6 @@ impl GmProject {
         match resource_type {
             ResourceType::Room => self.add_room(name),
             ResourceType::Object => self.add_object(name),
-            _ => {
-                println!("Resource type {:?} not implemented yet", resource_type);
-            }
         }
     }
 

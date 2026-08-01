@@ -5,8 +5,8 @@ use crate::data_win::model::Optn;
 pub fn build(optn: &Optn, layout: &WadLayout) -> ChunkBuilder {
     let mut chunk = ChunkBuilder::new("OPTN");
 
-    chunk.u32(0x8000_0000);
-    chunk.i32(1);
+    chunk.u32(optn.shader_extension_flag);
+    chunk.i32(optn.shader_ext_version);
 
     chunk.u64(optn.info);
     chunk.i32(optn.scale);

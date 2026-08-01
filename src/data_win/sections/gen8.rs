@@ -78,11 +78,13 @@ pub fn build(gen8: &Gen8, pool: &mut StringPool, layout: &WadLayout) -> ChunkBui
     }
 
     if layout.gms2_room_tail {
-        chunk.zero_bytes(8);
-        chunk.zero_bytes(8 * 4);
-        chunk.f32(60.0);
-        chunk.bool32(false);
-        chunk.zero_bytes(16);
+        chunk.u64(gen8.gms2_first_random);
+        for random_uid in &gen8.gms2_random_uid {
+            chunk.u64(*random_uid);
+        }
+        chunk.f32(gen8.gms2_fps);
+        chunk.bool32(gen8.gms2_allow_statistics);
+        chunk.bytes(&gen8.gms2_game_guid);
     }
 
     chunk
