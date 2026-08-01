@@ -239,7 +239,7 @@ impl Parser {
         statements
     }
 
-    fn build_call(&self, name: &str, args: Vec<Expr>) -> Expr {
+    fn build_call(&self, name: &str, args: Vec<CallArg>) -> Expr {
         Expr::Call {
             name: name.to_string(),
             args,
@@ -284,12 +284,19 @@ impl Parser {
 
         for segment in &target.segments {
             expr = match segment {
-                AccessSegment::Index(index) => {
-                    self.build_call("array_get", vec![expr, index.clone()])
-                }
+                AccessSegment::Index(index) => self.build_call(
+                    "array_get",
+                    vec![
+                        CallArg::Positional(expr),
+                        CallArg::Positional(index.clone()),
+                    ],
+                ),
                 AccessSegment::Member(name) => self.build_call(
                     "variable_struct_get",
-                    vec![expr, Expr::String(name.clone())],
+                    vec![
+                        CallArg::Positional(expr),
+                        CallArg::Positional(Expr::String(name.clone())),
+                    ],
                 ),
             };
         }
@@ -326,12 +333,21 @@ impl Parser {
             };
 
             expr = match segment {
-                AccessSegment::Index(index) => {
-                    self.build_call("array_set", vec![container_expr, index.clone(), expr])
-                }
+                AccessSegment::Index(index) => self.build_call(
+                    "array_set",
+                    vec![
+                        CallArg::Positional(container_expr),
+                        CallArg::Positional(index.clone()),
+                        CallArg::Positional(expr),
+                    ],
+                ),
                 AccessSegment::Member(name) => self.build_call(
                     "variable_struct_set",
-                    vec![container_expr, Expr::String(name.clone()), expr],
+                    vec![
+                        CallArg::Positional(container_expr),
+                        CallArg::Positional(Expr::String(name.clone())),
+                        CallArg::Positional(expr),
+                    ],
                 ),
             };
         }
@@ -345,7 +361,7 @@ impl Parser {
         let mut values = Vec::new();
         if self.current != Token::RightBracket {
             loop {
-                values.push(self.parse_expression());
+                values.push(CallArg::Positional(self.parse_expression()));
 
                 if self.current == Token::Comma {
                     self.advance();
@@ -407,7 +423,10 @@ impl Parser {
                     self.advance();
                     let index = self.parse_expression();
                     self.expect(Token::RightBracket);
-                    expr = self.build_call("array_get", vec![expr, index]);
+                    expr = self.build_call(
+                        "array_get",
+                        vec![CallArg::Positional(expr), CallArg::Positional(index)],
+                    );
                 }
                 Token::Dot => {
                     self.advance();
@@ -634,6 +653,113 @@ impl Parser {
         Statement::Assignment { name, value }
     }
 
+    fn parse_function_declaration_statement(&mut self) -> Statement {
+        self.advance(); // consume 'function'
+
+        let name = match &self.current {
+            Token::Identifier(name) => {
+                let name = name.clone();
+                self.advance();
+                name
+            }
+            _ => panic!("Expected function name"),
+        };
+
+        self.expect(Token::LeftParen);
+        let mut params = Vec::new();
+        if self.current != Token::RightParen {
+            loop {
+                let Token::Identifier(name) = &self.current else {
+                    panic!("Expected parameter name");
+                };
+                let name = name.clone();
+                self.advance();
+
+                let default_value = if self.current == Token::Equals {
+                    self.advance();
+                    Some(self.parse_expression())
+                } else {
+                    None
+                };
+
+                params.push(FunctionParameter {
+                    name,
+                    default_value,
+                });
+
+                if self.current == Token::Comma {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+        }
+        self.expect(Token::RightParen);
+
+        let body = if self.current == Token::LeftBrace {
+            self.parse_block()
+        } else {
+            vec![self.parse_statement()]
+        };
+
+        Statement::FunctionDeclaration { name, params, body }
+    }
+
+    fn parse_function_expression(&mut self) -> Expr {
+        self.advance(); // consume 'function'
+
+        let name = if let Token::Identifier(candidate) = &self.current {
+            let candidate = candidate.clone();
+            self.advance();
+            if self.current == Token::LeftParen {
+                Some(candidate)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        self.expect(Token::LeftParen);
+        let mut params = Vec::new();
+        if self.current != Token::RightParen {
+            loop {
+                let Token::Identifier(name) = &self.current else {
+                    panic!("Expected parameter name");
+                };
+                let name = name.clone();
+                self.advance();
+
+                let default_value = if self.current == Token::Equals {
+                    self.advance();
+                    Some(self.parse_expression())
+                } else {
+                    None
+                };
+
+                params.push(FunctionParameter {
+                    name,
+                    default_value,
+                });
+
+                if self.current == Token::Comma {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+        }
+        self.expect(Token::RightParen);
+
+        let body = if self.current == Token::LeftBrace {
+            self.parse_block()
+        } else {
+            vec![self.parse_statement()]
+        };
+
+        Expr::Function { name, params, body }
+    }
+
     fn parse_return_statement(&mut self) -> Statement {
         self.advance(); // consume 'return'
 
@@ -727,6 +853,7 @@ impl Parser {
                     return Statement::Continue;
                 }
                 "return" => return self.parse_return_statement(),
+                "function" => return self.parse_function_declaration_statement(),
                 _ => match self.peek(1) {
                     Token::Equals => return self.parse_assignment(name, true),
                     Token::PlusEquals => {
@@ -1084,6 +1211,8 @@ impl Parser {
                 self.parse_postfix(expr)
             }
 
+            Token::Identifier(name) if name == "function" => self.parse_function_expression(),
+
             Token::Identifier(name) => {
                 let name = name.clone();
                 self.advance();
@@ -1095,7 +1224,22 @@ impl Parser {
 
                     if self.current != Token::RightParen {
                         loop {
-                            args.push(self.parse_expression());
+                            if let Token::Identifier(candidate) = &self.current {
+                                let is_named = self.peek(1) == &Token::Colon;
+                                if is_named {
+                                    let arg_name = candidate.clone();
+                                    self.advance();
+                                    self.expect(Token::Colon);
+                                    args.push(CallArg::Named {
+                                        name: arg_name,
+                                        value: self.parse_expression(),
+                                    });
+                                } else {
+                                    args.push(CallArg::Positional(self.parse_expression()));
+                                }
+                            } else {
+                                args.push(CallArg::Positional(self.parse_expression()));
+                            }
 
                             if self.current == Token::Comma {
                                 self.advance();

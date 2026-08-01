@@ -47,6 +47,7 @@ fn value_type_from_expr(expr: &Expr) -> ValueType {
             UnaryOp::Not => ValueType::Bool,
         },
         Expr::Call { .. } => ValueType::Var,
+        Expr::Function { .. } => ValueType::Var,
         Expr::Ternary {
             then_expr,
             else_expr,
@@ -318,8 +319,14 @@ impl Compiler {
     fn collect_array_access_chain(expr: &Expr, indices: &mut Vec<Expr>) -> Option<String> {
         match expr {
             Expr::Call { name, args } if name == "array_get" && args.len() == 2 => {
-                indices.push(args[1].clone());
-                Self::collect_array_access_chain(&args[0], indices)
+                if let Some(CallArg::Positional(index)) = args.get(1) {
+                    indices.push(index.clone());
+                }
+                if let Some(CallArg::Positional(base)) = args.get(0) {
+                    Self::collect_array_access_chain(base, indices)
+                } else {
+                    None
+                }
             }
             Expr::Variable(name) => Some(name.clone()),
             _ => None,
@@ -416,6 +423,25 @@ impl Compiler {
 
     fn compile_statement(&mut self, statement: &Statement) {
         match statement {
+            Statement::FunctionDeclaration { name, params, body } => {
+                let function_name = format!("__gmlc_fn_{}", name);
+                let function_expr = Expr::Function {
+                    name: Some(name.clone()),
+                    params: params.clone(),
+                    body: body.clone(),
+                };
+                self.compile_expression(&function_expr);
+                let var = Variable {
+                    name: function_name.clone(),
+                    var_ref: 0xA000_0000,
+                };
+                self.instructions.push(Instruction::Pop {
+                    variable: var,
+                    dst_type: ValueType::Var,
+                    src_type: ValueType::Var,
+                });
+            }
+
             Statement::Assignment { name, value } => {
                 if self.try_compile_self_update_assignment(name, value) {
                     return;
@@ -810,18 +836,30 @@ impl Compiler {
                 }
             }
 
+            Expr::Function { .. } => {
+                let function_name = self.next_temp_name("fn");
+                self.instructions.push(Instruction::PushFunc(Function {
+                    name: function_name,
+                    var_ref: 0,
+                }));
+                self.emit_conv_if_needed(ValueType::Int32, ValueType::Var);
+            }
+
             Expr::Call { name, args } => {
                 if name == "array_get" && self.compile_array_read_call(expr) {
                     return;
                 }
 
                 if name == "variable_struct_get" && args.len() == 2 {
-                    self.compile_expression(&args[1]);
-                    self.emit_conv_if_needed(value_type_from_expr(&args[1]), ValueType::Var);
+                    self.compile_expression(args[1].expr());
+                    self.emit_conv_if_needed(value_type_from_expr(args[1].expr()), ValueType::Var);
 
-                    self.compile_expression(&args[0]);
-                    if !matches!(args[0], Expr::Integer(_)) {
-                        self.emit_conv_if_needed(value_type_from_expr(&args[0]), ValueType::Int32);
+                    self.compile_expression(args[0].expr());
+                    if !matches!(args[0].expr(), Expr::Integer(_)) {
+                        self.emit_conv_if_needed(
+                            value_type_from_expr(args[0].expr()),
+                            ValueType::Int32,
+                        );
                         self.instructions.push(Instruction::PushI32(100000));
                         self.instructions.push(Instruction::BinaryOp {
                             lhs_type: ValueType::Int32,
@@ -830,7 +868,10 @@ impl Compiler {
                         });
                         self.emit_conv_if_needed(ValueType::Int32, ValueType::Var);
                     } else {
-                        self.emit_conv_if_needed(value_type_from_expr(&args[0]), ValueType::Var);
+                        self.emit_conv_if_needed(
+                            value_type_from_expr(args[0].expr()),
+                            ValueType::Var,
+                        );
                     }
 
                     self.emit_call("variable_struct_get", 2);
@@ -838,15 +879,18 @@ impl Compiler {
                 }
 
                 if name == "variable_struct_set" && args.len() == 3 {
-                    self.compile_expression(&args[2]);
-                    self.emit_conv_if_needed(value_type_from_expr(&args[2]), ValueType::Var);
+                    self.compile_expression(args[2].expr());
+                    self.emit_conv_if_needed(value_type_from_expr(args[2].expr()), ValueType::Var);
 
-                    self.compile_expression(&args[1]);
-                    self.emit_conv_if_needed(value_type_from_expr(&args[1]), ValueType::Var);
+                    self.compile_expression(args[1].expr());
+                    self.emit_conv_if_needed(value_type_from_expr(args[1].expr()), ValueType::Var);
 
-                    self.compile_expression(&args[0]);
-                    if !matches!(args[0], Expr::Integer(_)) {
-                        self.emit_conv_if_needed(value_type_from_expr(&args[0]), ValueType::Int32);
+                    self.compile_expression(args[0].expr());
+                    if !matches!(args[0].expr(), Expr::Integer(_)) {
+                        self.emit_conv_if_needed(
+                            value_type_from_expr(args[0].expr()),
+                            ValueType::Int32,
+                        );
                         self.instructions.push(Instruction::PushI32(100000));
                         self.instructions.push(Instruction::BinaryOp {
                             lhs_type: ValueType::Int32,
@@ -855,7 +899,10 @@ impl Compiler {
                         });
                         self.emit_conv_if_needed(ValueType::Int32, ValueType::Var);
                     } else {
-                        self.emit_conv_if_needed(value_type_from_expr(&args[0]), ValueType::Var);
+                        self.emit_conv_if_needed(
+                            value_type_from_expr(args[0].expr()),
+                            ValueType::Var,
+                        );
                     }
 
                     self.emit_call("variable_struct_set", 3);
@@ -863,8 +910,8 @@ impl Compiler {
                 }
 
                 for arg in args.iter().rev() {
-                    self.compile_expression(arg);
-                    self.emit_conv_if_needed(value_type_from_expr(arg), ValueType::Var);
+                    self.compile_expression(arg.expr());
+                    self.emit_conv_if_needed(value_type_from_expr(arg.expr()), ValueType::Var);
                 }
 
                 let func = Function {

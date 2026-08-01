@@ -1,8 +1,19 @@
 #[derive(Debug, Clone)]
+pub struct FunctionParameter {
+    pub name: String,
+    pub default_value: Option<Expr>,
+}
+
+#[derive(Debug, Clone)]
 pub enum Statement {
     Assignment {
         name: String,
         value: Expr,
+    },
+    FunctionDeclaration {
+        name: String,
+        params: Vec<FunctionParameter>,
+        body: Vec<Statement>,
     },
     If {
         condition: Expr,
@@ -39,6 +50,21 @@ pub enum Statement {
 }
 
 #[derive(Debug, Clone)]
+pub enum CallArg {
+    Positional(Expr),
+    Named { name: String, value: Expr },
+}
+
+impl CallArg {
+    pub fn expr(&self) -> &Expr {
+        match self {
+            CallArg::Positional(expr) => expr,
+            CallArg::Named { value, .. } => value,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Expr {
     Integer(i32),
     String(String),
@@ -53,7 +79,13 @@ pub enum Expr {
 
     Call {
         name: String,
-        args: Vec<Expr>,
+        args: Vec<CallArg>,
+    },
+
+    Function {
+        name: Option<String>,
+        params: Vec<FunctionParameter>,
+        body: Vec<Statement>,
     },
 
     Binary {
