@@ -56,9 +56,15 @@ struct PipelineArgs {
     )]
     add_events: Vec<String>,
 
+    /// Compile a GML script as a startup script into a minimal data.win.
+    /// Example (inline): --compile-script "show_debug_message(\"hi\");"
+    /// Example (file): --compile-script ./scripts/startup.gml
+    #[arg(long = "compile-script", value_name = "CODE_OR_FILE")]
+    compile_script: Option<String>,
+
     /// Compile the in-memory project directly to a data.win file.
-    #[arg(long = "compile", value_name = "OUTPUT_DATA_WIN")]
-    compile_output: Option<PathBuf>,
+    #[arg(short = 'o', long = "output", value_name = "OUTPUT_DATA_WIN")]
+    output: Option<PathBuf>,
 
     /// Optionally persist the in-memory project to disk.
     /// Pass either a .yyp file path or a directory.
@@ -76,7 +82,7 @@ fn main() {
 
     if !is_pipeline_mode(&args.pipeline) {
         eprintln!(
-            "No pipeline arguments provided. Use flags like --create, --add-resource, --add-event, --add-object-to-room, and --compile."
+            "No pipeline arguments provided. Use flags like --create, --add-resource, --add-event, --add-object-to-room, --compile-script, and --compile."
         );
         return;
     }
@@ -89,13 +95,55 @@ fn is_pipeline_mode(pipeline: &PipelineArgs) -> bool {
         || !pipeline.add_resources.is_empty()
         || !pipeline.add_events.is_empty()
         || !pipeline.add_objects_to_room.is_empty()
-        || pipeline.compile_output.is_some()
+        || pipeline.compile_script.is_some()
+        || pipeline.output.is_some()
         || pipeline.save_project.is_some()
 }
 
 fn run_pipeline(pipeline: PipelineArgs) {
-    let wants_compile_output = pipeline.compile_output.is_some();
+    let wants_compile_output = pipeline.output.is_some();
     let wants_save_project = pipeline.save_project.is_some();
+
+    if let Some(compile_script_arg) = pipeline.compile_script {
+        if pipeline.create.is_some()
+            || !pipeline.add_resources.is_empty()
+            || !pipeline.add_objects_to_room.is_empty()
+            || !pipeline.add_events.is_empty()
+            || pipeline.save_project.is_some()
+        {
+            eprintln!(
+                "--compile-script cannot be combined with project creation flags or --save-project"
+            );
+            return;
+        }
+
+        let code = match resolve_event_code_arg(&compile_script_arg) {
+            Ok(code) => code,
+            Err(error) => {
+                eprintln!("{}", error);
+                return;
+            }
+        };
+
+        let output_path = match pipeline.output {
+            Some(path) => path,
+            None => {
+                eprintln!("--compile-script requires --compile <OUTPUT_DATA_WIN>");
+                return;
+            }
+        };
+
+        let script_name = startup_script_name(&compile_script_arg);
+        let program = compiler::create_program_from_gml(&code);
+        let output = data_win::build_data_win(&script_name, program);
+
+        if let Err(e) = std::fs::write(&output_path, output) {
+            eprintln!("Failed to write data.win output: {}", e);
+            return;
+        }
+        println!("Output written to {}", output_path.display());
+        return;
+    }
 
     let Some(project_name) = pipeline.create else {
         eprintln!("Pipeline mode requires --create <PROJECT_NAME>");
@@ -195,7 +243,7 @@ fn run_pipeline(pipeline: PipelineArgs) {
         ));
     }
 
-    if let Some(output_path) = pipeline.compile_output {
+    if let Some(output_path) = pipeline.output {
         let output = data_win::build_data_win_from_gmproject(project.clone());
         if let Err(e) = std::fs::write(&output_path, output) {
             eprintln!("Failed to write data.win output: {}", e);
@@ -224,6 +272,18 @@ fn resolve_event_code_arg(value: &str) -> Result<String, String> {
             .map_err(|error| format!("Failed to read .gml event code file '{}': {}", value, error))
     } else {
         Ok(value.to_string())
+    }
+}
+
+fn startup_script_name(value: &str) -> String {
+    if value.to_ascii_lowercase().ends_with(".gml") {
+        std::path::Path::new(value)
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap_or("startup_script")
+            .to_string()
+    } else {
+        "startup_script".to_string()
     }
 }
 
