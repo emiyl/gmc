@@ -408,16 +408,21 @@ impl Parser {
         self.expect(Token::LeftBracket);
 
         let mut values = Vec::new();
-        if self.current != Token::RightBracket {
-            loop {
-                values.push(CallArg::Positional(self.parse_expression()));
-
-                if self.current == Token::Comma {
-                    self.advance();
-                } else {
-                    break;
-                }
+        loop {
+            self.skip_newlines();
+            if self.current == Token::RightBracket {
+                break;
             }
+
+            values.push(CallArg::Positional(self.parse_expression()));
+            self.skip_newlines();
+
+            if self.current == Token::Comma {
+                self.advance();
+                continue;
+            }
+
+            break;
         }
 
         self.expect(Token::RightBracket);
@@ -1515,6 +1520,48 @@ mod tests {
         assert_eq!(
             format!("{:?}", program[0]),
             "VarDeclaration { declarations: [(\"x\", Some(Unary { operator: Neg, operand: Float(5.5) }))] }"
+        );
+    }
+
+    #[test]
+    fn parse_array_literal_trailing_comma() {
+        let input = "var x = [1, 2,];";
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+
+        let program = parser.parse_program();
+        assert_eq!(program.len(), 1);
+        assert_eq!(
+            format!("{:?}", program[0]),
+            "VarDeclaration { declarations: [(\"x\", Some(Call { name: \"@@NewGMLArray@@\", args: [Positional(Integer(1)), Positional(Integer(2))] }))] }"
+        );
+    }
+
+    #[test]
+    fn parse_array_literal_newlines_and_trailing_comma() {
+        let input = "var x = [1,\n2,\n];";
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+
+        let program = parser.parse_program();
+        assert_eq!(program.len(), 1);
+        assert_eq!(
+            format!("{:?}", program[0]),
+            "VarDeclaration { declarations: [(\"x\", Some(Call { name: \"@@NewGMLArray@@\", args: [Positional(Integer(1)), Positional(Integer(2))] }))] }"
+        );
+    }
+
+    #[test]
+    fn parse_array_literal_newline_before_closing_bracket() {
+        let input = "var x = [1,\n2\n];";
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+
+        let program = parser.parse_program();
+        assert_eq!(program.len(), 1);
+        assert_eq!(
+            format!("{:?}", program[0]),
+            "VarDeclaration { declarations: [(\"x\", Some(Call { name: \"@@NewGMLArray@@\", args: [Positional(Integer(1)), Positional(Integer(2))] }))] }"
         );
     }
 }
