@@ -19,6 +19,8 @@ pub struct Parser {
     lexer: Lexer,
     current: Token,
     next: Vec<Token>,
+    current_line: usize,
+    line_token_position: usize,
 }
 
 impl Parser {
@@ -30,10 +32,22 @@ impl Parser {
             lexer,
             current,
             next,
+            current_line: 1,
+            line_token_position: 1,
         }
     }
 
+    fn increment_line(&mut self) {
+        self.current_line += 1;
+        self.line_token_position = 1;
+    }
+
     fn advance(&mut self) {
+        if self.current == Token::Newline {
+            self.increment_line();
+        } else {
+            self.line_token_position += 1;
+        }
         self.current = self.next.remove(0);
         self.next.push(self.lexer.next_token());
     }
@@ -50,7 +64,10 @@ impl Parser {
 
     fn expect(&mut self, expected: Token) {
         if self.current != expected {
-            panic!("Expected {:?}, got {:?}", expected, self.current);
+            panic!(
+                "Expected {:?}, got {:?} on line {}, token {}",
+                expected, self.current, self.current_line, self.line_token_position
+            );
         }
 
         self.advance();
@@ -1375,12 +1392,18 @@ impl Parser {
 
             Token::CommentSingleLine => {
                 self.advance();
-                while self.current != Token::EOF && self.current != Token::Semicolon {
+                while self.current != Token::EOF && self.current != Token::Newline {
                     self.advance();
                 }
-                if self.current == Token::Semicolon {
+                if self.current == Token::Newline {
                     self.advance();
+                    self.increment_line();
                 }
+                self.parse_primary()
+            }
+
+            Token::Newline => {
+                self.advance();
                 self.parse_primary()
             }
 

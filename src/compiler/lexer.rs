@@ -48,6 +48,7 @@ pub enum Token {
     Comma,
 
     CommentSingleLine,
+    Newline,
 
     EOF,
 }
@@ -67,8 +68,11 @@ impl Lexer {
     }
 
     pub fn next_token(&mut self) -> Token {
-        while self.position < self.input.len() && self.input[self.position].is_whitespace() {
-            self.position += 1;
+        while self.position < self.input.len() {
+            match self.input[self.position] {
+                ' ' | '\t' | '\r' => self.position += 1,
+                _ => break,
+            }
         }
 
         if self.position >= self.input.len() {
@@ -201,6 +205,8 @@ impl Lexer {
 
             '0'..='9' => return self.read_number(),
             'a'..='z' | 'A'..='Z' | '_' => return self.read_identifier(),
+
+            '\n' => Token::Newline,
 
             _ => panic!("Unknown character {}", c),
         };
