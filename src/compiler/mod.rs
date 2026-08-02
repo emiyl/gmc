@@ -152,6 +152,14 @@ mod tests {
             ],
         },
         TestCase {
+            input: "// comment\nglobal.asserts_passed = 0;",
+            expected_bytecode: &[
+                0x840F0000, // PushI.e 0
+                0x4525FFFB, // Pop.v (global)
+                0xA0000000, // Variable index 0
+            ],
+        },
+        TestCase {
             input: "for (i = 0; i < 10; i += 1) {}",
             expected_bytecode: &[
                 0x840F0000, // PushI.e 0

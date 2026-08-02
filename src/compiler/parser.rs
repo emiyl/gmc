@@ -77,6 +77,12 @@ impl Parser {
         let mut statements = Vec::new();
 
         while self.current != Token::EOF {
+            while self.current == Token::Newline || self.current == Token::CommentSingleLine {
+                self.advance();
+            }
+            if self.current == Token::EOF {
+                break;
+            }
             let block = self.parse_block();
             statements.extend(block);
         }
@@ -93,6 +99,10 @@ impl Parser {
         let mut statements = Vec::new();
 
         while self.current != Token::RightBrace {
+            if self.current == Token::Newline || self.current == Token::CommentSingleLine {
+                self.advance();
+                continue;
+            }
             statements.push(self.parse_statement());
         }
 
@@ -485,102 +495,239 @@ impl Parser {
         needs_semicolon: bool,
     ) -> Statement {
         let target = self.parse_access_target_from_identifier(name);
+        let simple_variable_name = if target.segments.is_empty() {
+            if let Expr::Variable(name) = &target.base {
+                Some(name.clone())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         let statement = match self.current {
             Token::Equals => {
                 self.advance();
                 let value = self.parse_expression();
-                Statement::Expression(self.build_access_write_expr(&target, value, None))
+                if let Some(name) = simple_variable_name {
+                    Statement::Assignment { name, value }
+                } else {
+                    Statement::Expression(self.build_access_write_expr(&target, value, None))
+                }
             }
             Token::PlusEquals => {
                 self.advance();
                 let right = self.parse_expression();
-                Statement::Expression(self.build_access_write_expr(
-                    &target,
-                    right,
-                    Some(BinaryOp::Add),
-                ))
+                if let Some(name) = simple_variable_name.clone() {
+                    let value = Expr::Binary {
+                        left: Box::new(Expr::Variable(name.clone())),
+                        operator: BinaryOp::Add,
+                        right: Box::new(right),
+                    };
+                    Statement::Assignment { name, value }
+                } else {
+                    Statement::Expression(self.build_access_write_expr(
+                        &target,
+                        right,
+                        Some(BinaryOp::Add),
+                    ))
+                }
             }
             Token::MinusEquals => {
                 self.advance();
                 let right = self.parse_expression();
-                Statement::Expression(self.build_access_write_expr(
-                    &target,
-                    right,
-                    Some(BinaryOp::Sub),
-                ))
+                if let Some(name) = simple_variable_name.clone() {
+                    let value = Expr::Binary {
+                        left: Box::new(Expr::Variable(name.clone())),
+                        operator: BinaryOp::Sub,
+                        right: Box::new(right),
+                    };
+                    Statement::Assignment { name, value }
+                } else {
+                    Statement::Expression(self.build_access_write_expr(
+                        &target,
+                        right,
+                        Some(BinaryOp::Sub),
+                    ))
+                }
             }
             Token::AsteriskEquals => {
                 self.advance();
                 let right = self.parse_expression();
-                Statement::Expression(self.build_access_write_expr(
-                    &target,
-                    right,
-                    Some(BinaryOp::Mul),
-                ))
+                if let Some(name) = simple_variable_name.clone() {
+                    let value = Expr::Binary {
+                        left: Box::new(Expr::Variable(name.clone())),
+                        operator: BinaryOp::Mul,
+                        right: Box::new(right),
+                    };
+                    Statement::Assignment { name, value }
+                } else {
+                    Statement::Expression(self.build_access_write_expr(
+                        &target,
+                        right,
+                        Some(BinaryOp::Mul),
+                    ))
+                }
             }
             Token::SlashEquals => {
                 self.advance();
                 let right = self.parse_expression();
-                Statement::Expression(self.build_access_write_expr(
-                    &target,
-                    right,
-                    Some(BinaryOp::Div),
-                ))
+                if let Some(name) = simple_variable_name.clone() {
+                    let value = Expr::Binary {
+                        left: Box::new(Expr::Variable(name.clone())),
+                        operator: BinaryOp::Div,
+                        right: Box::new(right),
+                    };
+                    Statement::Assignment { name, value }
+                } else {
+                    Statement::Expression(self.build_access_write_expr(
+                        &target,
+                        right,
+                        Some(BinaryOp::Div),
+                    ))
+                }
             }
             Token::PercentEquals => {
                 self.advance();
                 let right = self.parse_expression();
-                Statement::Expression(self.build_access_write_expr(
-                    &target,
-                    right,
-                    Some(BinaryOp::Rem),
-                ))
+                if let Some(name) = simple_variable_name.clone() {
+                    let value = Expr::Binary {
+                        left: Box::new(Expr::Variable(name.clone())),
+                        operator: BinaryOp::Rem,
+                        right: Box::new(right),
+                    };
+                    Statement::Assignment { name, value }
+                } else {
+                    Statement::Expression(self.build_access_write_expr(
+                        &target,
+                        right,
+                        Some(BinaryOp::Rem),
+                    ))
+                }
             }
             Token::AmpersandEquals => {
                 self.advance();
                 let right = self.parse_expression();
-                Statement::Expression(self.build_access_write_expr(
-                    &target,
-                    right,
-                    Some(BinaryOp::And),
-                ))
+                if let Some(name) = simple_variable_name.clone() {
+                    let value = Expr::Binary {
+                        left: Box::new(Expr::Variable(name.clone())),
+                        operator: BinaryOp::And,
+                        right: Box::new(right),
+                    };
+                    Statement::Assignment { name, value }
+                } else {
+                    Statement::Expression(self.build_access_write_expr(
+                        &target,
+                        right,
+                        Some(BinaryOp::And),
+                    ))
+                }
             }
             Token::VerticalBarEquals => {
                 self.advance();
                 let right = self.parse_expression();
-                Statement::Expression(self.build_access_write_expr(
-                    &target,
-                    right,
-                    Some(BinaryOp::Or),
-                ))
+                if let Some(name) = simple_variable_name.clone() {
+                    let value = Expr::Binary {
+                        left: Box::new(Expr::Variable(name.clone())),
+                        operator: BinaryOp::Or,
+                        right: Box::new(right),
+                    };
+                    Statement::Assignment { name, value }
+                } else {
+                    Statement::Expression(self.build_access_write_expr(
+                        &target,
+                        right,
+                        Some(BinaryOp::Or),
+                    ))
+                }
             }
             Token::CaretEquals => {
                 self.advance();
                 let right = self.parse_expression();
-                Statement::Expression(self.build_access_write_expr(
-                    &target,
-                    right,
-                    Some(BinaryOp::Xor),
-                ))
+                if let Some(name) = simple_variable_name.clone() {
+                    let value = Expr::Binary {
+                        left: Box::new(Expr::Variable(name.clone())),
+                        operator: BinaryOp::Xor,
+                        right: Box::new(right),
+                    };
+                    Statement::Assignment { name, value }
+                } else {
+                    Statement::Expression(self.build_access_write_expr(
+                        &target,
+                        right,
+                        Some(BinaryOp::Xor),
+                    ))
+                }
             }
             Token::ShiftLeftEquals => {
                 self.advance();
                 let right = self.parse_expression();
-                Statement::Expression(self.build_access_write_expr(
-                    &target,
-                    right,
-                    Some(BinaryOp::Shl),
-                ))
+                if let Some(name) = simple_variable_name.clone() {
+                    let value = Expr::Binary {
+                        left: Box::new(Expr::Variable(name.clone())),
+                        operator: BinaryOp::Shl,
+                        right: Box::new(right),
+                    };
+                    Statement::Assignment { name, value }
+                } else {
+                    Statement::Expression(self.build_access_write_expr(
+                        &target,
+                        right,
+                        Some(BinaryOp::Shl),
+                    ))
+                }
             }
             Token::ShiftRightEquals => {
                 self.advance();
                 let right = self.parse_expression();
-                Statement::Expression(self.build_access_write_expr(
-                    &target,
-                    right,
-                    Some(BinaryOp::Shr),
-                ))
+                if let Some(name) = simple_variable_name.clone() {
+                    let value = Expr::Binary {
+                        left: Box::new(Expr::Variable(name.clone())),
+                        operator: BinaryOp::Shr,
+                        right: Box::new(right),
+                    };
+                    Statement::Assignment { name, value }
+                } else {
+                    Statement::Expression(self.build_access_write_expr(
+                        &target,
+                        right,
+                        Some(BinaryOp::Shr),
+                    ))
+                }
+            }
+            Token::PlusPlus => {
+                self.advance();
+                if let Some(name) = simple_variable_name.clone() {
+                    let value = Expr::Binary {
+                        left: Box::new(Expr::Variable(name.clone())),
+                        operator: BinaryOp::Add,
+                        right: Box::new(Expr::Integer(1)),
+                    };
+                    Statement::Assignment { name, value }
+                } else {
+                    Statement::Expression(self.build_access_write_expr(
+                        &target,
+                        Expr::Integer(1),
+                        Some(BinaryOp::Add),
+                    ))
+                }
+            }
+            Token::MinusMinus => {
+                self.advance();
+                if let Some(name) = simple_variable_name.clone() {
+                    let value = Expr::Binary {
+                        left: Box::new(Expr::Variable(name.clone())),
+                        operator: BinaryOp::Sub,
+                        right: Box::new(Expr::Integer(1)),
+                    };
+                    Statement::Assignment { name, value }
+                } else {
+                    Statement::Expression(self.build_access_write_expr(
+                        &target,
+                        Expr::Integer(1),
+                        Some(BinaryOp::Sub),
+                    ))
+                }
             }
             Token::Semicolon => {
                 if needs_semicolon {
@@ -1370,7 +1517,10 @@ impl Parser {
                     }
 
                     if self.current != Token::RightParen {
-                        panic!("Expected ')'");
+                        panic!(
+                            "Expected ')', got {:?} at line {}, token {}",
+                            self.current, self.current_line, self.line_token_position
+                        );
                     }
 
                     self.advance(); // consume ')'
