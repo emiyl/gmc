@@ -20,6 +20,7 @@ use crate::data_win::model::{
 };
 use crate::data_win::string_pool::StringPool;
 use crate::project::GmProject;
+use crate::types::InstanceType;
 
 pub struct DataWin {
     pub wad_version: u8,
@@ -110,10 +111,20 @@ pub fn build_data_win(code_name: &str, program: Program) -> Vec<u8> {
             .into_iter()
             .enumerate()
             .map(|(index, variable)| {
-                let mut compiled = CompiledVariable::with_name(variable.name, index as i32);
-                if compiled.name.starts_with("builtin.") {
-                    compiled.name = strip_scope_prefix(&compiled.name);
-                    compiled.instance_type = -6;
+                let mut compiled =
+                    CompiledVariable::with_name(strip_scope_prefix(&variable.name), index as i32);
+                if variable.name.starts_with("global.") {
+                    compiled.instance_type = InstanceType::Global as i32;
+                } else if variable.name.starts_with("self.") {
+                    compiled.instance_type = InstanceType::Self_ as i32;
+                } else if variable.name.starts_with("other.") {
+                    compiled.instance_type = InstanceType::Other as i32;
+                } else if variable.name.starts_with("local.") {
+                    compiled.instance_type = InstanceType::Local as i32;
+                } else if variable.name.starts_with("static.") {
+                    compiled.instance_type = InstanceType::Static as i32;
+                } else if variable.name.starts_with("builtin.") {
+                    compiled.instance_type = InstanceType::Builtin as i32;
                 }
                 compiled
             })
@@ -227,20 +238,33 @@ pub fn build_data_win_from_gmproject(project: GmProject) -> Vec<u8> {
 fn strip_scope_prefix(name: &str) -> String {
     name.strip_prefix("global.")
         .or_else(|| name.strip_prefix("self."))
+        .or_else(|| name.strip_prefix("other."))
+        .or_else(|| name.strip_prefix("local."))
+        .or_else(|| name.strip_prefix("static."))
         .or_else(|| name.strip_prefix("builtin."))
         .unwrap_or(name)
         .to_string()
 }
 
 fn resolved_variable_to_compiled(variable: &ResolvedVariable) -> CompiledVariable {
-    let mut compiled = CompiledVariable::with_name(
-        strip_scope_prefix(&variable.name),
-        variable.var_ref as i32,
-    );
+    let mut compiled =
+        CompiledVariable::with_name(strip_scope_prefix(&variable.name), variable.var_ref as i32);
 
-    // BC17+ resolves argumentN and other builtins by name when instanceType is -6.
-    if variable.name.starts_with("builtin.") {
-        compiled.instance_type = -6;
+    // Set the VARI instance_type so the runtime knows which scope owns this variable.
+    if variable.name.starts_with("global.") {
+        compiled.instance_type = InstanceType::Global as i32;
+    } else if variable.name.starts_with("self.") {
+        compiled.instance_type = InstanceType::Self_ as i32;
+    } else if variable.name.starts_with("other.") {
+        compiled.instance_type = InstanceType::Other as i32;
+    } else if variable.name.starts_with("local.") {
+        compiled.instance_type = InstanceType::Local as i32;
+    } else if variable.name.starts_with("static.") {
+        compiled.instance_type = InstanceType::Static as i32;
+    } else if variable.name.starts_with("builtin.") {
+        // BC17: argument variables use instanceType -6 (INSTANCE_BUILTIN).
+        // The runtime resolves the builtin var ID by name.
+        compiled.instance_type = InstanceType::Builtin as i32;
     }
 
     compiled

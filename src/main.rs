@@ -1,6 +1,7 @@
 mod compiler;
 mod data_win;
 mod project;
+mod types;
 
 use clap::{ArgAction, Args as ClapArgs, Parser as ClapParser};
 use env_logger::Builder;

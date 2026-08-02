@@ -2,6 +2,7 @@ use super::ast::BinaryOp;
 use super::bytecode::*;
 use super::instruction::*;
 use super::resolver::Variable;
+use crate::types::InstanceType;
 
 #[derive(Debug)]
 pub struct Word {
@@ -13,16 +14,23 @@ pub struct Word {
 
 fn encode_variable(variable: &Variable) -> u16 {
     let name = &variable.name;
-    let reference = if name.starts_with("global.") {
-        0xFFFB
+    // Map the variable's scope prefix to the 16-bit instance-type field that
+    // the GameMaker VM reads from each Push/Pop instruction word.
+    if name.starts_with("global.") {
+        InstanceType::Global as u16
     } else if name.starts_with("self.") {
-        0xFFFF
+        InstanceType::Self_ as u16
+    } else if name.starts_with("other.") {
+        InstanceType::Other as u16
+    } else if name.starts_with("local.") {
+        InstanceType::Local as u16
+    } else if name.starts_with("static.") {
+        InstanceType::Static as u16
     } else if name.starts_with("builtin.") {
-        0xFFF1
+        InstanceType::Argument as u16
     } else {
-        0xFFFA
-    };
-    reference
+        InstanceType::Builtin as u16
+    }
 }
 
 impl Word {

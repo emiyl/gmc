@@ -276,6 +276,21 @@ impl Parser {
             }
         }
 
+        // Normalize `global.field`, `self.field`, `other.field` into a scoped
+        // variable name so they are emitted with the correct instance type
+        // rather than being lowered to variable_struct_get/set calls.
+        if let Expr::Variable(ref base_name) = target.base {
+            if matches!(base_name.as_str(), "global" | "self" | "other")
+                && matches!(target.segments.first(), Some(AccessSegment::Member(_)))
+            {
+                let scope = base_name.clone();
+                let first = target.segments.remove(0);
+                if let AccessSegment::Member(field) = first {
+                    target.base = Expr::Variable(format!("{}.{}", scope, field));
+                }
+            }
+        }
+
         target
     }
 
@@ -782,6 +797,10 @@ impl Parser {
             _ => {}
         }
 
+        if self.is_keyword("var") {
+            return self.parse_var_declaration(false);
+        }
+
         if let Token::Identifier(name) = &self.current {
             let name = name.clone();
 
@@ -825,6 +844,77 @@ impl Parser {
         matches!(&self.current, Token::Identifier(value) if value == keyword)
     }
 
+    fn parse_var_declaration(&mut self, needs_semicolon: bool) -> Statement {
+        self.advance(); // consume 'var'
+
+        let mut declarations = Vec::new();
+        loop {
+            let Token::Identifier(var_name) = &self.current else {
+                panic!(
+                    "Expected identifier in var declaration, got {:?}",
+                    self.current
+                );
+            };
+            let var_name = var_name.clone();
+            self.advance();
+
+            let value = if self.current == Token::Equals {
+                self.advance();
+                Some(self.parse_expression())
+            } else {
+                None
+            };
+
+            declarations.push((var_name, value));
+
+            if self.current == Token::Comma {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+
+        if needs_semicolon {
+            self.expect(Token::Semicolon);
+        }
+        Statement::VarDeclaration { declarations }
+    }
+
+    fn parse_globalvar_declaration(&mut self) -> Statement {
+        self.advance(); // consume 'globalvar'
+        let Token::Identifier(var_name) = &self.current else {
+            panic!("Expected identifier in globalvar declaration");
+        };
+        let var_name = var_name.clone();
+        self.advance();
+        self.expect(Token::Semicolon);
+        Statement::GlobalVarDeclaration { name: var_name }
+    }
+
+    fn parse_static_declaration(&mut self, needs_semicolon: bool) -> Statement {
+        self.advance(); // consume 'static'
+        let Token::Identifier(var_name) = &self.current else {
+            panic!("Expected identifier after 'static'");
+        };
+        let var_name = var_name.clone();
+        self.advance();
+
+        let value = if self.current == Token::Equals {
+            self.advance();
+            Some(self.parse_expression())
+        } else {
+            None
+        };
+
+        if needs_semicolon {
+            self.expect(Token::Semicolon);
+        }
+        Statement::StaticDeclaration {
+            name: var_name,
+            value,
+        }
+    }
+
     fn parse_statement(&mut self) -> Statement {
         match self.current {
             Token::PlusPlus => return self.parse_prefix_increment_statement(BinaryOp::Add, true),
@@ -854,6 +944,9 @@ impl Parser {
                 }
                 "return" => return self.parse_return_statement(),
                 "function" => return self.parse_function_declaration_statement(),
+                "var" => return self.parse_var_declaration(true),
+                "globalvar" => return self.parse_globalvar_declaration(),
+                "static" => return self.parse_static_declaration(true),
                 _ => match self.peek(1) {
                     Token::Equals => return self.parse_assignment(name, true),
                     Token::PlusEquals => {

@@ -49,10 +49,10 @@ This will create a project with a room and an object, add the object to the room
 
 ## Variables
 - [x] Local variables
-- [ ] Global variables
-- [ ] Instance variables
-- [ ] Static variables
-- [ ] Variable declarations (`var`, `globalvar`, `static`)
+- [x] Global variables
+- [x] Instance variables
+- [x] Static variables
+- [x] Variable declarations (`var`, `globalvar`, `static`)
 
 ## Functions
 - [ ] Function declarations

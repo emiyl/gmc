@@ -72,6 +72,9 @@ pub struct Compiler {
     struct_name_prefix: String,
     declared_functions: HashMap<String, String>,
     function_parameters: HashMap<String, String>,
+    local_vars: HashSet<String>,
+    global_vars: HashSet<String>,
+    static_vars: HashSet<String>,
     break_scopes: Vec<Vec<usize>>,
     loop_scopes: Vec<LoopScope>,
     temp_counter: u32,
@@ -87,6 +90,9 @@ impl Compiler {
             struct_name_prefix: String::new(),
             declared_functions: HashMap::new(),
             function_parameters: HashMap::new(),
+            local_vars: HashSet::new(),
+            global_vars: HashSet::new(),
+            static_vars: HashSet::new(),
             break_scopes: Vec::new(),
             loop_scopes: Vec::new(),
             temp_counter: 0,
@@ -386,6 +392,9 @@ impl Compiler {
 
     pub fn compile_function_body(&mut self, params: &[FunctionParameter], body: &[Statement]) {
         let previous_function_parameters = std::mem::take(&mut self.function_parameters);
+        let previous_local_vars = std::mem::take(&mut self.local_vars);
+        let previous_global_vars = std::mem::take(&mut self.global_vars);
+        let previous_static_vars = std::mem::take(&mut self.static_vars);
 
         for (index, param) in params.iter().enumerate() {
             let arg_name = format!("builtin.argument{}", index);
@@ -398,6 +407,9 @@ impl Compiler {
         }
 
         self.function_parameters = previous_function_parameters;
+        self.local_vars = previous_local_vars;
+        self.global_vars = previous_global_vars;
+        self.static_vars = previous_static_vars;
     }
 
     fn compile_expression_statement_with_discard(&mut self, expr: &Expr) {
@@ -417,6 +429,29 @@ impl Compiler {
             name: name.to_string(),
             value,
         });
+    }
+
+    /// Resolve a plain variable name to its scoped form based on declarations.
+    /// Returns e.g. `"local.x"`, `"global.x"`, or `"static.x"`, falling back
+    /// to the name as-is for ordinary instance variables.
+    fn resolve_var_name<'a>(&self, name: &'a str) -> std::borrow::Cow<'a, str> {
+        if name.contains('.') {
+            // Already scoped (e.g. "global.score", "self.x")
+            return std::borrow::Cow::Borrowed(name);
+        }
+        if let Some(mapped) = self.function_parameters.get(name) {
+            return std::borrow::Cow::Owned(mapped.clone());
+        }
+        if self.local_vars.contains(name) {
+            return std::borrow::Cow::Owned(format!("local.{}", name));
+        }
+        if self.global_vars.contains(name) {
+            return std::borrow::Cow::Owned(format!("global.{}", name));
+        }
+        if self.static_vars.contains(name) {
+            return std::borrow::Cow::Owned(format!("static.{}", name));
+        }
+        std::borrow::Cow::Borrowed(name)
     }
 
     fn resolve_known_struct_expr(&self, expr: &Expr) -> Option<Expr> {
@@ -472,23 +507,25 @@ impl Compiler {
             }
 
             Statement::Assignment { name, value } => {
-                if self.try_compile_self_update_assignment(name, value) {
+                let resolved = self.resolve_var_name(name).into_owned();
+
+                if self.try_compile_self_update_assignment(&resolved, value) {
                     return;
                 }
 
                 if let Expr::StructLiteral(fields) = value {
-                    self.struct_instance_vars.insert(name.clone());
+                    self.struct_instance_vars.insert(resolved.clone());
                     self.struct_literal_fields
-                        .insert(name.clone(), fields.clone());
+                        .insert(resolved.clone(), fields.clone());
                 } else {
-                    self.struct_instance_vars.remove(name);
-                    self.struct_literal_fields.remove(name);
+                    self.struct_instance_vars.remove(&resolved);
+                    self.struct_literal_fields.remove(&resolved);
                 }
 
                 self.compile_expression(value);
 
                 let var = Variable {
-                    name: name.clone(),
+                    name: resolved,
                     var_ref: 0xA000_0000,
                 };
 
@@ -497,6 +534,60 @@ impl Compiler {
                     dst_type: ValueType::Var,
                     src_type: value_type_from_expr(value),
                 });
+            }
+
+            Statement::VarDeclaration { declarations } => {
+                for (var_name, value) in declarations {
+                    self.local_vars.insert(var_name.clone());
+                    if let Some(init_expr) = value {
+                        self.compile_expression(init_expr);
+                        let var = Variable {
+                            name: format!("local.{}", var_name),
+                            var_ref: 0xA000_0000,
+                        };
+                        self.instructions.push(Instruction::Pop {
+                            variable: var,
+                            dst_type: ValueType::Var,
+                            src_type: value_type_from_expr(init_expr),
+                        });
+                    }
+                }
+            }
+
+            Statement::GlobalVarDeclaration { name } => {
+                self.global_vars.insert(name.clone());
+            }
+
+            Statement::StaticDeclaration { name, value } => {
+                self.static_vars.insert(name.clone());
+
+                // Emit the static-init guard pattern:
+                //   Break(-6)          // isstaticok: push bool (already initialized?)
+                //   BranchTrue → skip  // skip init if already done
+                //   Break(-7)          // setstatic: mark as initialized
+                //   <init value>
+                //   Pop.static name
+                //   [skip:]
+                self.instructions.push(Instruction::Break(-6)); // isstaticok
+                let branch_skip = self.emit_branch(BranchType::True);
+
+                self.instructions.push(Instruction::Break(-7)); // setstatic
+
+                let init_expr = value.as_ref().cloned().unwrap_or(Expr::Integer(0));
+                self.compile_expression(&init_expr);
+
+                let var = Variable {
+                    name: format!("static.{}", name),
+                    var_ref: 0xA000_0000,
+                };
+                self.instructions.push(Instruction::Pop {
+                    variable: var,
+                    dst_type: ValueType::Var,
+                    src_type: value_type_from_expr(&init_expr),
+                });
+
+                let skip_target = self.instructions.len();
+                self.patch_branch_to(branch_skip, skip_target);
             }
 
             Statement::Expression(expr) => {
@@ -781,11 +872,7 @@ impl Compiler {
             }
 
             Expr::Variable(name) => {
-                let resolved_name = self
-                    .function_parameters
-                    .get(name)
-                    .cloned()
-                    .unwrap_or_else(|| name.clone());
+                let resolved_name = self.resolve_var_name(name).into_owned();
                 let var = Variable {
                     name: resolved_name,
                     var_ref: 0xA000_0000,
@@ -799,6 +886,15 @@ impl Compiler {
             }
 
             Expr::MemberAccess { target, field } => {
+                // `global.field`, `self.field`, `other.field` → scoped variable
+                if let Expr::Variable(base) = target.as_ref() {
+                    if matches!(base.as_str(), "global" | "self" | "other") {
+                        let scoped = Expr::Variable(format!("{}.{}", base, field));
+                        self.compile_expression(&scoped);
+                        return;
+                    }
+                }
+
                 if let Some(Expr::StructLiteral(fields)) = self.resolve_known_struct_expr(target) {
                     if let Some((_, value)) = fields.iter().find(|(key, _)| key == field) {
                         let folded_value = value.clone();

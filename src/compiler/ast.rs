@@ -10,6 +10,19 @@ pub enum Statement {
         name: String,
         value: Expr,
     },
+    /// `var x`, `var x = 5`, `var x = 1, y = 2`
+    VarDeclaration {
+        declarations: Vec<(String, Option<Expr>)>,
+    },
+    /// `globalvar score`
+    GlobalVarDeclaration {
+        name: String,
+    },
+    /// `static counter = 0`
+    StaticDeclaration {
+        name: String,
+        value: Option<Expr>,
+    },
     FunctionDeclaration {
         name: String,
         params: Vec<FunctionParameter>,
