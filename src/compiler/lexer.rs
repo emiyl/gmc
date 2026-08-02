@@ -8,13 +8,17 @@ pub enum Token {
     ShiftRight,
     ShiftLeftEquals,
     ShiftRightEquals,
+    GreaterThan,
+    GreaterThanEquals,
+    LessThan,
+    LessThanEquals,
 
-    Asterisk,
-    AsteriskEquals,
-    Slash,
-    SlashEquals,
-    Percent,
-    PercentEquals,
+    Multiply,
+    MultiplyEquals,
+    Divide,
+    DivideEquals,
+    Remainder,
+    RemainderEquals,
     Plus,
     PlusEquals,
     PlusPlus,
@@ -85,9 +89,9 @@ impl Lexer {
             '*' => {
                 if self.peek_char(1) == Some('=') {
                     self.position += 1;
-                    Token::AsteriskEquals
+                    Token::MultiplyEquals
                 } else {
-                    Token::Asterisk
+                    Token::Multiply
                 }
             }
             '/' => {
@@ -103,17 +107,17 @@ impl Lexer {
                     }
                     Some('=') => {
                         self.position += 1;
-                        Token::SlashEquals
+                        Token::DivideEquals
                     }
-                    _ => Token::Slash,
+                    _ => Token::Divide,
                 }
             }
             '%' => {
                 if self.peek_char(1) == Some('=') {
                     self.position += 1;
-                    Token::PercentEquals
+                    Token::RemainderEquals
                 } else {
-                    Token::Percent
+                    Token::Remainder
                 }
             }
             '+' => {
@@ -163,8 +167,12 @@ impl Lexer {
                 }
             }
             '~' => Token::Tilde,
-            '<' => {
-                if self.peek_char(1) == Some('<') {
+            '<' => match self.peek_char(1) {
+                Some('=') => {
+                    self.position += 1;
+                    Token::LessThanEquals
+                }
+                Some('<') => {
                     if self.peek_char(2) == Some('=') {
                         self.position += 2;
                         Token::ShiftLeftEquals
@@ -172,12 +180,15 @@ impl Lexer {
                         self.position += 1;
                         Token::ShiftLeft
                     }
-                } else {
-                    Token::LeftAngle
                 }
-            }
-            '>' => {
-                if self.peek_char(1) == Some('>') {
+                _ => Token::LessThan,
+            },
+            '>' => match self.peek_char(1) {
+                Some('=') => {
+                    self.position += 1;
+                    Token::GreaterThanEquals
+                }
+                Some('>') => {
                     if self.peek_char(2) == Some('=') {
                         self.position += 2;
                         Token::ShiftRightEquals
@@ -185,10 +196,9 @@ impl Lexer {
                         self.position += 1;
                         Token::ShiftRight
                     }
-                } else {
-                    Token::RightAngle
                 }
-            }
+                _ => Token::GreaterThan,
+            },
             '=' => Token::Equals,
             ':' => Token::Colon,
             '?' => Token::Question,

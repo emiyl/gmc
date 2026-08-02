@@ -563,7 +563,7 @@ impl Parser {
                     ))
                 }
             }
-            Token::AsteriskEquals => {
+            Token::MultiplyEquals => {
                 self.advance();
                 let right = self.parse_expression();
                 if let Some(name) = simple_variable_name.clone() {
@@ -581,7 +581,7 @@ impl Parser {
                     ))
                 }
             }
-            Token::SlashEquals => {
+            Token::DivideEquals => {
                 self.advance();
                 let right = self.parse_expression();
                 if let Some(name) = simple_variable_name.clone() {
@@ -599,7 +599,7 @@ impl Parser {
                     ))
                 }
             }
-            Token::PercentEquals => {
+            Token::RemainderEquals => {
                 self.advance();
                 let right = self.parse_expression();
                 if let Some(name) = simple_variable_name.clone() {
@@ -984,9 +984,11 @@ impl Parser {
                 Token::Equals => self.parse_assignment(name, false),
                 Token::PlusEquals => self.parse_compound_assignment(name, BinaryOp::Add, false),
                 Token::MinusEquals => self.parse_compound_assignment(name, BinaryOp::Sub, false),
-                Token::AsteriskEquals => self.parse_compound_assignment(name, BinaryOp::Mul, false),
-                Token::SlashEquals => self.parse_compound_assignment(name, BinaryOp::Div, false),
-                Token::PercentEquals => self.parse_compound_assignment(name, BinaryOp::Rem, false),
+                Token::MultiplyEquals => self.parse_compound_assignment(name, BinaryOp::Mul, false),
+                Token::DivideEquals => self.parse_compound_assignment(name, BinaryOp::Div, false),
+                Token::RemainderEquals => {
+                    self.parse_compound_assignment(name, BinaryOp::Rem, false)
+                }
                 Token::AmpersandEquals => {
                     self.parse_compound_assignment(name, BinaryOp::And, false)
                 }
@@ -1131,13 +1133,13 @@ impl Parser {
                     Token::MinusEquals => {
                         return self.parse_compound_assignment(name, BinaryOp::Sub, true);
                     }
-                    Token::AsteriskEquals => {
+                    Token::MultiplyEquals => {
                         return self.parse_compound_assignment(name, BinaryOp::Mul, true);
                     }
-                    Token::SlashEquals => {
+                    Token::DivideEquals => {
                         return self.parse_compound_assignment(name, BinaryOp::Div, true);
                     }
-                    Token::PercentEquals => {
+                    Token::RemainderEquals => {
                         return self.parse_compound_assignment(name, BinaryOp::Rem, true);
                     }
                     Token::AmpersandEquals => {
@@ -1188,192 +1190,73 @@ impl Parser {
         self.parse_expression_with_left(left)
     }
 
+    fn parse_binary_expression(&mut self, left: Expr, operator: BinaryOp) -> Expr {
+        let right = self.parse_primary();
+        Expr::Binary {
+            left: Box::new(left),
+            operator,
+            right: Box::new(right),
+        }
+    }
+
     fn parse_expression_with_left(&mut self, mut left: Expr) -> Expr {
         loop {
             match &self.current {
-                Token::Asterisk => {
+                Token::Multiply => {
                     self.advance();
-
-                    let right = self.parse_primary();
-
-                    left = Expr::Binary {
-                        left: Box::new(left),
-                        operator: BinaryOp::Mul,
-                        right: Box::new(right),
-                    };
+                    left = self.parse_binary_expression(left, BinaryOp::Mul);
                 }
-                Token::Slash => {
+                Token::Divide => {
                     self.advance();
-
-                    let right = self.parse_primary();
-
-                    left = Expr::Binary {
-                        left: Box::new(left),
-                        operator: BinaryOp::Div,
-                        right: Box::new(right),
-                    };
+                    left = self.parse_binary_expression(left, BinaryOp::Div);
                 }
-                Token::Percent => {
+                Token::Remainder => {
                     self.advance();
-
-                    let right = self.parse_primary();
-
-                    left = Expr::Binary {
-                        left: Box::new(left),
-                        operator: BinaryOp::Rem,
-                        right: Box::new(right),
-                    };
+                    left = self.parse_binary_expression(left, BinaryOp::Rem);
                 }
                 Token::Plus => {
                     self.advance();
-
-                    let right = self.parse_primary();
-
-                    left = Expr::Binary {
-                        left: Box::new(left),
-                        operator: BinaryOp::Add,
-                        right: Box::new(right),
-                    };
+                    left = self.parse_binary_expression(left, BinaryOp::Add);
                 }
                 Token::Minus => {
                     self.advance();
-
-                    let right = self.parse_primary();
-
-                    left = Expr::Binary {
-                        left: Box::new(left),
-                        operator: BinaryOp::Sub,
-                        right: Box::new(right),
-                    };
+                    left = self.parse_binary_expression(left, BinaryOp::Sub);
                 }
                 Token::Ampersand => {
                     self.advance();
-
-                    let right = self.parse_primary();
-
-                    left = Expr::Binary {
-                        left: Box::new(left),
-                        operator: BinaryOp::And,
-                        right: Box::new(right),
-                    };
+                    left = self.parse_binary_expression(left, BinaryOp::And);
                 }
                 Token::VerticalBar => {
                     self.advance();
-
-                    let right = self.parse_primary();
-
-                    left = Expr::Binary {
-                        left: Box::new(left),
-                        operator: BinaryOp::Or,
-                        right: Box::new(right),
-                    };
+                    left = self.parse_binary_expression(left, BinaryOp::Or);
                 }
                 Token::Caret => {
                     self.advance();
-
-                    let right = self.parse_primary();
-
-                    left = Expr::Binary {
-                        left: Box::new(left),
-                        operator: BinaryOp::Xor,
-                        right: Box::new(right),
-                    };
-                }
-                Token::LeftAngle => {
-                    self.advance();
-
-                    match self.current {
-                        Token::LeftAngle => {
-                            self.advance();
-
-                            let right = self.parse_primary();
-
-                            left = Expr::Binary {
-                                left: Box::new(left),
-                                operator: BinaryOp::Shl,
-                                right: Box::new(right),
-                            };
-                        }
-                        Token::Equals => {
-                            self.advance();
-
-                            let right = self.parse_primary();
-
-                            left = Expr::Binary {
-                                left: Box::new(left),
-                                operator: BinaryOp::Lte,
-                                right: Box::new(right),
-                            };
-                        }
-                        _ => {
-                            let right = self.parse_primary();
-
-                            left = Expr::Binary {
-                                left: Box::new(left),
-                                operator: BinaryOp::Lt,
-                                right: Box::new(right),
-                            };
-                        }
-                    }
-                }
-                Token::RightAngle => {
-                    self.advance();
-
-                    match self.current {
-                        Token::RightAngle => {
-                            self.advance();
-
-                            let right = self.parse_primary();
-
-                            left = Expr::Binary {
-                                left: Box::new(left),
-                                operator: BinaryOp::Shr,
-                                right: Box::new(right),
-                            };
-                        }
-                        Token::Equals => {
-                            self.advance();
-
-                            let right = self.parse_primary();
-
-                            left = Expr::Binary {
-                                left: Box::new(left),
-                                operator: BinaryOp::Gte,
-                                right: Box::new(right),
-                            };
-                        }
-                        _ => {
-                            let right = self.parse_primary();
-
-                            left = Expr::Binary {
-                                left: Box::new(left),
-                                operator: BinaryOp::Gt,
-                                right: Box::new(right),
-                            };
-                        }
-                    }
+                    left = self.parse_binary_expression(left, BinaryOp::Xor);
                 }
                 Token::ShiftLeft => {
                     self.advance();
-
-                    let right = self.parse_primary();
-
-                    left = Expr::Binary {
-                        left: Box::new(left),
-                        operator: BinaryOp::Shl,
-                        right: Box::new(right),
-                    };
+                    left = self.parse_binary_expression(left, BinaryOp::Shl);
                 }
                 Token::ShiftRight => {
                     self.advance();
-
-                    let right = self.parse_primary();
-
-                    left = Expr::Binary {
-                        left: Box::new(left),
-                        operator: BinaryOp::Shr,
-                        right: Box::new(right),
-                    };
+                    left = self.parse_binary_expression(left, BinaryOp::Shr);
+                }
+                Token::LessThan => {
+                    self.advance();
+                    left = self.parse_binary_expression(left, BinaryOp::Lt);
+                }
+                Token::LessThanEquals => {
+                    self.advance();
+                    left = self.parse_binary_expression(left, BinaryOp::Lte);
+                }
+                Token::GreaterThan => {
+                    self.advance();
+                    left = self.parse_binary_expression(left, BinaryOp::Gt);
+                }
+                Token::GreaterThanEquals => {
+                    self.advance();
+                    left = self.parse_binary_expression(left, BinaryOp::Gte);
                 }
                 Token::Equals => {
                     self.advance();
