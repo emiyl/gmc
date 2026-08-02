@@ -1,7 +1,7 @@
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     Identifier(String),
-    Number(i32),
+    Number(String),
     StringLiteral(String),
 
     ShiftLeft,
@@ -222,9 +222,26 @@ impl Lexer {
             self.position += 1;
         }
 
+        if self.peek_char(0) == Some('.') && self.peek_char(1) != Some('.') {
+            self.position += 1;
+            while self.position < self.input.len() && self.input[self.position].is_ascii_digit() {
+                self.position += 1;
+            }
+        }
+
+        if let Some('e') | Some('E') = self.peek_char(0) {
+            self.position += 1;
+            if let Some('+') | Some('-') = self.peek_char(0) {
+                self.position += 1;
+            }
+            while self.position < self.input.len() && self.input[self.position].is_ascii_digit() {
+                self.position += 1;
+            }
+        }
+
         let text: String = self.input[start..self.position].iter().collect();
 
-        Token::Number(text.parse().unwrap())
+        Token::Number(text)
     }
 
     fn read_identifier(&mut self) -> Token {

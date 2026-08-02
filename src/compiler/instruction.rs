@@ -39,6 +39,8 @@ pub enum BranchType {
 pub enum Instruction {
     PushI(i32),
     PushI32(i32),
+    PushF(f32),
+    PushD(f64),
     PushFunc(Function),
     PushE(i16),
     PushBool(bool),

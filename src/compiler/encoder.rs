@@ -70,6 +70,8 @@ fn instruction_word_len(instruction: &Instruction) -> usize {
     match instruction {
         Instruction::PushI(_) => 1,
         Instruction::PushI32(_) => 2,
+        Instruction::PushF(_) => 2,
+        Instruction::PushD(_) => 3,
         Instruction::PushFunc(_) => 2,
         Instruction::PushE(_) => 1,
         Instruction::PushBool(_) => 1,
@@ -134,6 +136,26 @@ pub fn encode(instructions: Vec<Instruction>) -> Bytecode {
                 let word = Word::new(opcode as u8, instr_type1, instr_type2, 0).to_u32();
                 output.write_u32(word);
                 output.write_u32(value as u32);
+            }
+
+            Instruction::PushF(value) => {
+                let opcode = Opcode::Push as u16;
+                let instr_type1 = ValueType::Float as u8;
+                let instr_type2 = ValueType::Double as u8;
+                let word = Word::new(opcode as u8, instr_type1, instr_type2, 0).to_u32();
+                output.write_u32(word);
+                output.write_u32(value.to_bits());
+            }
+
+            Instruction::PushD(value) => {
+                let opcode = Opcode::Push as u16;
+                let instr_type1 = ValueType::Double as u8;
+                let instr_type2 = ValueType::Double as u8;
+                let word = Word::new(opcode as u8, instr_type1, instr_type2, 0).to_u32();
+                output.write_u32(word);
+                let bits = value.to_bits();
+                output.write_u32(bits as u32);
+                output.write_u32((bits >> 32) as u32);
             }
 
             Instruction::PushFunc(function) => {

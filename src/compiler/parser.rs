@@ -1428,10 +1428,14 @@ impl Parser {
 
     fn parse_primary(&mut self) -> Expr {
         match &self.current {
-            Token::Number(value) => {
-                let value = *value;
+            Token::Number(text) => {
+                let value = text.clone();
                 self.advance();
-                Expr::Integer(value)
+                if value.contains('.') || value.contains('e') || value.contains('E') {
+                    Expr::Float(value.parse().unwrap())
+                } else {
+                    Expr::Integer(value.parse().unwrap())
+                }
             }
 
             Token::StringLiteral(value) => {

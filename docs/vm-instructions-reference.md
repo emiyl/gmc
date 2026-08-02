@@ -19,10 +19,10 @@ Important points:
 Each instruction is a 32-bit word:
 
 ```text
-+--------+--------+--------+--------+
-| opcode | t1     | t2     | inst/operand |
-+--------+--------+--------+--------+
-  bits31..24  bits23..20 bits19..16 bits15..0
++------------+------------+-----------+--------------+
+| opcode     | t1         | t2        | inst/operand |
++------------+------------+-----------+--------------+
+  bits31..24   bits23..20   bits19..16  bits15..0
 ```
 
 The relevant fields are:

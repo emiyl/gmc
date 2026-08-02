@@ -81,6 +81,7 @@ impl CallArg {
 pub enum Expr {
     Integer(i32),
     String(String),
+    Float(f64),
     Bool(bool),
     Variable(String),
 

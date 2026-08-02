@@ -20,11 +20,16 @@ fn value_type_from_expr(expr: &Expr) -> ValueType {
     match expr {
         Expr::Integer(_) => ValueType::Int32,
         Expr::String(_) => ValueType::String,
+        Expr::Float(_) => ValueType::Double,
         Expr::Bool(_) => ValueType::Bool,
         Expr::Variable(_) => ValueType::Var,
         Expr::StructLiteral(_) => ValueType::Var,
         Expr::MemberAccess { .. } => ValueType::Var,
-        Expr::Binary { operator, .. } => match operator {
+        Expr::Binary {
+            operator,
+            left,
+            right,
+        } => match operator {
             BinaryOp::Mul
             | BinaryOp::Div
             | BinaryOp::Rem
@@ -35,7 +40,15 @@ fn value_type_from_expr(expr: &Expr) -> ValueType {
             | BinaryOp::Or
             | BinaryOp::Xor
             | BinaryOp::Shl
-            | BinaryOp::Shr => ValueType::Int32,
+            | BinaryOp::Shr => {
+                let left_type = value_type_from_expr(left);
+                let right_type = value_type_from_expr(right);
+                match (left_type, right_type) {
+                    (ValueType::Double, _) | (_, ValueType::Double) => ValueType::Double,
+                    (ValueType::Float, _) | (_, ValueType::Float) => ValueType::Float,
+                    _ => ValueType::Int32,
+                }
+            }
             BinaryOp::Lt
             | BinaryOp::Lte
             | BinaryOp::Eq
@@ -870,6 +883,10 @@ impl Compiler {
 
             Expr::String(value) => {
                 self.instructions.push(Instruction::PushS(value.clone()));
+            }
+
+            Expr::Float(value) => {
+                self.instructions.push(Instruction::PushD(*value));
             }
 
             Expr::Bool(value) => {
