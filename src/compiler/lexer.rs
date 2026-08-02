@@ -19,6 +19,7 @@ pub enum Token {
     DivideEquals,
     Remainder,
     RemainderEquals,
+    Modulo,
     Plus,
     PlusEquals,
     PlusPlus,
@@ -33,8 +34,6 @@ pub enum Token {
     CaretEquals,
     Exclamation,
     Tilde,
-    LeftAngle,
-    RightAngle,
 
     Equals,
     Colon,
@@ -266,7 +265,11 @@ impl Lexer {
 
         let text: String = self.input[start..self.position].iter().collect();
 
-        Token::Identifier(text)
+        match text.as_str() {
+            "div" => Token::Divide,
+            "mod" => Token::Modulo,
+            _ => Token::Identifier(text),
+        }
     }
 
     fn read_string(&mut self, quote: char) -> Token {

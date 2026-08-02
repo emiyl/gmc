@@ -1,5 +1,4 @@
 use super::ast::*;
-use super::lexer::Token::Identifier;
 use super::lexer::{Lexer, Token};
 
 #[derive(Debug, Clone)]
@@ -65,7 +64,7 @@ impl Parser {
     fn expect(&mut self, expected: Token) {
         if self.current != expected {
             panic!(
-                "Expected {:?}, got {:?} on line {}, token {}",
+                "Expected {:?}, got {:?} at line {}, token {}",
                 expected, self.current, self.current_line, self.line_token_position
             );
         }
@@ -1181,7 +1180,10 @@ impl Parser {
                 },
             };
 
-            panic!("Unexpected identifier: {}", name);
+            panic!(
+                "Unexpected identifier: {} at line {}, token {}",
+                name, self.current_line, self.line_token_position
+            );
         }
 
         // Otherwise, it's an expression statement.
@@ -1219,6 +1221,10 @@ impl Parser {
                 Token::Remainder => {
                     self.advance();
                     left = self.parse_binary_expression(left, BinaryOp::Rem);
+                }
+                Token::Modulo => {
+                    self.advance();
+                    left = self.parse_binary_expression(left, BinaryOp::Mod);
                 }
                 Token::Plus => {
                     self.advance();
@@ -1294,20 +1300,6 @@ impl Parser {
                         };
                     }
                 }
-                Identifier(str) => match str.as_str() {
-                    "mod" => {
-                        self.advance();
-
-                        let right = self.parse_primary();
-
-                        left = Expr::Binary {
-                            left: Box::new(left),
-                            operator: BinaryOp::Mod,
-                            right: Box::new(right),
-                        }
-                    }
-                    _ => break,
-                },
                 _ => break,
             }
         }
@@ -1461,7 +1453,10 @@ impl Parser {
                 self.parse_primary()
             }
 
-            _ => panic!("Unexpected token {:?}", self.current),
+            _ => panic!(
+                "Unexpected token {:?} at line {}, token {}",
+                self.current, self.current_line, self.line_token_position
+            ),
         }
     }
 }
