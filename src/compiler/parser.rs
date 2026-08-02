@@ -90,10 +90,14 @@ impl Parser {
         statements
     }
 
-    fn parse_block(&mut self) -> Vec<Statement> {
+    fn skip_newlines(&mut self) {
         while self.current == Token::Newline || self.current == Token::CommentSingleLine {
             self.advance();
         }
+    }
+
+    fn parse_block(&mut self) -> Vec<Statement> {
+        self.skip_newlines();
 
         if self.current != Token::LeftBrace {
             return vec![self.parse_statement()];
@@ -886,6 +890,7 @@ impl Parser {
             }
         }
         self.expect(Token::RightParen);
+        self.skip_newlines();
 
         let body = if self.current == Token::LeftBrace {
             self.parse_block()
@@ -941,6 +946,7 @@ impl Parser {
             }
         }
         self.expect(Token::RightParen);
+        self.skip_newlines();
 
         let body = if self.current == Token::LeftBrace {
             self.parse_block()
