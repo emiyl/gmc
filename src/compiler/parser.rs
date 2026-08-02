@@ -425,6 +425,11 @@ impl Parser {
 
         if self.current != Token::RightBrace {
             loop {
+                if self.current == Token::Newline {
+                    self.advance();
+                    continue;
+                }
+
                 let key = match &self.current {
                     Token::Identifier(name) => {
                         let key = name.clone();
@@ -436,7 +441,10 @@ impl Parser {
                         self.advance();
                         key
                     }
-                    _ => panic!("Expected identifier or string literal in struct literal"),
+                    _ => panic!(
+                        "Expected identifier or string literal in struct literal, got {:?} at line {}, token {}",
+                        self.current, self.current_line, self.line_token_position
+                    ),
                 };
 
                 self.expect(Token::Colon);
@@ -1551,7 +1559,6 @@ impl Parser {
                 }
                 if self.current == Token::Newline {
                     self.advance();
-                    self.increment_line();
                 }
                 self.parse_primary()
             }
@@ -1563,5 +1570,21 @@ impl Parser {
 
             _ => panic!("Unexpected token {:?}", self.current),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn comment_increments_line_number() {
+        let input = "// comment\nx = 1;";
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+
+        let program = parser.parse_program();
+        assert_eq!(program.len(), 1);
+        assert_eq!(parser.current_line, 2);
     }
 }

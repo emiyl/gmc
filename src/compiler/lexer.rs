@@ -93,12 +93,13 @@ impl Lexer {
             '/' => {
                 match self.peek_char(1) {
                     Some('/') => {
-                        // Consume the rest of the line as a comment.
+                        // Consume the rest of the line as a comment, but keep the newline
+                        // in the input so it can be emitted as a separate token.
                         while self.position < self.input.len() && self.input[self.position] != '\n'
                         {
                             self.position += 1;
                         }
-                        Token::CommentSingleLine
+                        return Token::CommentSingleLine;
                     }
                     Some('=') => {
                         self.position += 1;
