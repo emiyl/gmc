@@ -1355,6 +1355,20 @@ impl Parser {
                 }
             }
 
+            Token::Plus => {
+                self.advance();
+                self.parse_primary()
+            }
+
+            Token::Minus => {
+                self.advance();
+                let operand = self.parse_primary();
+                Expr::Unary {
+                    operator: UnaryOp::Neg,
+                    operand: Box::new(operand),
+                }
+            }
+
             Token::LeftBracket => {
                 let expr = self.parse_array_literal();
                 self.parse_postfix(expr)
@@ -1474,5 +1488,33 @@ mod tests {
         let program = parser.parse_program();
         assert_eq!(program.len(), 1);
         assert_eq!(parser.current_line, 2);
+    }
+
+    #[test]
+    fn parse_negative_integer_literal() {
+        let input = "var x = -5;";
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+
+        let program = parser.parse_program();
+        assert_eq!(program.len(), 1);
+        assert_eq!(
+            format!("{:?}", program[0]),
+            "VarDeclaration { declarations: [(\"x\", Some(Unary { operator: Neg, operand: Integer(5) }))] }"
+        );
+    }
+
+    #[test]
+    fn parse_negative_float_literal() {
+        let input = "var x = -5.5;";
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+
+        let program = parser.parse_program();
+        assert_eq!(program.len(), 1);
+        assert_eq!(
+            format!("{:?}", program[0]),
+            "VarDeclaration { declarations: [(\"x\", Some(Unary { operator: Neg, operand: Float(5.5) }))] }"
+        );
     }
 }
