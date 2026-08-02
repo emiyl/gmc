@@ -229,6 +229,11 @@ impl Parser {
         let mut default = None;
 
         while self.current != Token::RightBrace {
+            self.skip_newlines();
+            if self.current == Token::RightBrace {
+                break;
+            }
+
             if self.is_keyword("case") {
                 self.advance(); // consume 'case'
                 let case_value = self.parse_expression();
@@ -267,6 +272,10 @@ impl Parser {
             && !self.is_keyword("case")
             && !self.is_keyword("default")
         {
+            if self.current == Token::Newline || self.current == Token::CommentSingleLine {
+                self.advance();
+                continue;
+            }
             statements.push(self.parse_statement());
         }
 
