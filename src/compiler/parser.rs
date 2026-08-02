@@ -1304,6 +1304,16 @@ impl Parser {
                 self.parse_postfix(expr)
             }
 
+            Token::Identifier(name) if name == "true" => {
+                self.advance();
+                Expr::Bool(true)
+            }
+
+            Token::Identifier(name) if name == "false" => {
+                self.advance();
+                Expr::Bool(false)
+            }
+
             Token::Identifier(name) if name == "function" => self.parse_function_expression(),
 
             Token::Identifier(name) => {

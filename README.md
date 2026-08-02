@@ -55,7 +55,7 @@ This will create a project with a room and an object, add the object to the room
 - [x] Variable declarations (`var`, `globalvar`, `static`)
 
 ## Functions
-- [ ] Function declarations
+- [x] Function declarations
 - [ ] Anonymous functions
 - [ ] Default arguments
 - [ ] Named arguments

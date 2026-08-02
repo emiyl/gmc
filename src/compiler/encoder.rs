@@ -72,6 +72,7 @@ fn instruction_word_len(instruction: &Instruction) -> usize {
         Instruction::PushI32(_) => 2,
         Instruction::PushFunc(_) => 2,
         Instruction::PushE(_) => 1,
+        Instruction::PushBool(_) => 1,
         Instruction::PushS(_) => 2,
         Instruction::Push(_) => 2,
         Instruction::Branch(_, _) => 1,
@@ -153,6 +154,14 @@ pub fn encode(instructions: Vec<Instruction>) -> Bytecode {
                 let value_u16 = u16::from_le_bytes(value_bytes);
 
                 let word = Word::new(opcode as u8, instr_type1, instr_type2, value_u16).to_u32();
+                output.write_u32(word);
+            }
+
+            Instruction::PushBool(value) => {
+                let opcode = Opcode::Push as u16;
+                let instr_type1 = ValueType::Bool as u8;
+                let instr_type2 = ValueType::Double as u8;
+                let word = Word::new(opcode as u8, instr_type1, instr_type2, value as u16).to_u32();
                 output.write_u32(word);
             }
 

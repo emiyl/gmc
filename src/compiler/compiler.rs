@@ -20,6 +20,7 @@ fn value_type_from_expr(expr: &Expr) -> ValueType {
     match expr {
         Expr::Integer(_) => ValueType::Int32,
         Expr::String(_) => ValueType::String,
+        Expr::Bool(_) => ValueType::Bool,
         Expr::Variable(_) => ValueType::Var,
         Expr::StructLiteral(_) => ValueType::Var,
         Expr::MemberAccess { .. } => ValueType::Var,
@@ -869,6 +870,10 @@ impl Compiler {
 
             Expr::String(value) => {
                 self.instructions.push(Instruction::PushS(value.clone()));
+            }
+
+            Expr::Bool(value) => {
+                self.instructions.push(Instruction::PushBool(*value));
             }
 
             Expr::Variable(name) => {

@@ -98,6 +98,14 @@ mod tests {
             ],
         },
         TestCase {
+            input: "a = true;",
+            expected_bytecode: &[
+                0xC0040001, // Push.b true
+                0x4545FFFA, // Pop.v.b
+                0xA0000000, // Variable index 0
+            ],
+        },
+        TestCase {
             input: "a = 1; a++; ++a; a--; --a;",
             expected_bytecode: &[
                 0x840F0001, // PushI.e 1

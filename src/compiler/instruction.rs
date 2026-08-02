@@ -41,6 +41,7 @@ pub enum Instruction {
     PushI32(i32),
     PushFunc(Function),
     PushE(i16),
+    PushBool(bool),
     PushS(String),
     Push(Variable),
 

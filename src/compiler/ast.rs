@@ -81,6 +81,7 @@ impl CallArg {
 pub enum Expr {
     Integer(i32),
     String(String),
+    Bool(bool),
     Variable(String),
 
     StructLiteral(Vec<(String, Expr)>),
