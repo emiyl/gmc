@@ -241,20 +241,5 @@ fn resolve_project_file_path(project: &project::GmProject, save_path: &Path) -> 
 }
 
 fn parse_pipeline_event_type(value: &str) -> Result<project::EventType, ()> {
-    project::EventType::from_str(value).or_else(|_| match value.to_ascii_lowercase().as_str() {
-        "create" => Ok(project::EventType::Create),
-        "destroy" => Ok(project::EventType::Destroy),
-        "alarm" => Ok(project::EventType::Alarm),
-        "step" => Ok(project::EventType::Step),
-        "collision" => Ok(project::EventType::Collision),
-        "keyboard" => Ok(project::EventType::Keyboard),
-        "mouse" => Ok(project::EventType::Mouse),
-        "other" => Ok(project::EventType::Other),
-        "draw" => Ok(project::EventType::Draw),
-        "keypress" => Ok(project::EventType::KeyPress),
-        "keyrelease" => Ok(project::EventType::KeyRelease),
-        "cleanup" => Ok(project::EventType::Cleanup),
-        "precreate" => Ok(project::EventType::PreCreate),
-        _ => Err(()),
-    })
+    project::EventType::from_str(value)
 }

@@ -42,20 +42,20 @@ impl FromStr for EventType {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "Create" => Ok(Self::Create),
-            "Destroy" => Ok(Self::Destroy),
-            "Alarm" => Ok(Self::Alarm),
-            "Step" => Ok(Self::Step),
-            "Collision" => Ok(Self::Collision),
-            "Keyboard" => Ok(Self::Keyboard),
-            "Mouse" => Ok(Self::Mouse),
-            "Other" => Ok(Self::Other),
-            "Draw" => Ok(Self::Draw),
-            "KeyPress" => Ok(Self::KeyPress),
-            "KeyRelease" => Ok(Self::KeyRelease),
-            "Cleanup" => Ok(Self::Cleanup),
-            "PreCreate" => Ok(Self::PreCreate),
+        match s.to_ascii_lowercase().as_str() {
+            "create" => Ok(Self::Create),
+            "destroy" => Ok(Self::Destroy),
+            "alarm" => Ok(Self::Alarm),
+            "step" => Ok(Self::Step),
+            "collision" => Ok(Self::Collision),
+            "keyboard" => Ok(Self::Keyboard),
+            "mouse" => Ok(Self::Mouse),
+            "other" => Ok(Self::Other),
+            "draw" => Ok(Self::Draw),
+            "keypress" => Ok(Self::KeyPress),
+            "keyrelease" => Ok(Self::KeyRelease),
+            "cleanup" => Ok(Self::Cleanup),
+            "precreate" => Ok(Self::PreCreate),
             _ => Err(()),
         }
     }
