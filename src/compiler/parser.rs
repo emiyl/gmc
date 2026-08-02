@@ -91,6 +91,10 @@ impl Parser {
     }
 
     fn parse_block(&mut self) -> Vec<Statement> {
+        while self.current == Token::Newline || self.current == Token::CommentSingleLine {
+            self.advance();
+        }
+
         if self.current != Token::LeftBrace {
             return vec![self.parse_statement()];
         }
