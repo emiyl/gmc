@@ -20,5 +20,3 @@ If you have the butterscotch binary in your path, you can also use the "run" com
 gmc run
 gmc run --runner /path/to/butterscotch
 ```
-
-This will output a data.win file in the `build` directory. You can then run this data.win file using Butterscotch.
