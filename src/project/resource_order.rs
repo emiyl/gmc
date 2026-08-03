@@ -1,7 +1,6 @@
 use crate::project::formatter::{format_gamemaker_json, read_gamemaker_json};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::io::Read;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ResourceOrder {

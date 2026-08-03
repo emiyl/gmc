@@ -7,9 +7,7 @@ use super::ResourceId;
 pub use object::Object;
 pub use room::Room;
 
-use serde_json::Value;
 use std::fs;
-use std::io::Read;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ResourceKind {
