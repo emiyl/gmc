@@ -110,13 +110,21 @@ impl GmProjectYyp {
         Ok(())
     }
 
-    pub fn add_resource(&mut self, name: String, path: String) {
+    pub fn add_resource(&mut self, name: String, path: String, is_room: bool) {
+        let resource_id = ResourceId {
+            name: name,
+            path: path,
+        };
+
         self.resources.push(Resource {
-            id: ResourceId {
-                name: name,
-                path: path,
-            },
+            id: resource_id.clone(),
         });
+
+        if is_room {
+            self.room_order_nodes.push(RoomOrderNode {
+                room_id: resource_id,
+            });
+        }
     }
 }
 
