@@ -2,7 +2,7 @@ use super::ast::BinaryOp;
 use super::bytecode::*;
 use super::instruction::*;
 use super::resolver::Variable;
-use crate::types::InstanceType;
+use crate::data_win::InstanceType;
 
 #[derive(Debug)]
 pub struct Word {

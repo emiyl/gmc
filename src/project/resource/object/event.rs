@@ -72,6 +72,16 @@ impl Event {
         }
     }
 
+    pub fn get_event_type_enum(&self) -> EventType {
+        EventType::try_from(self.event_type).unwrap_or(EventType::Create)
+    }
+
+    pub fn get_event_subtype_enum(&self) -> EventSubType {
+        let event_type_enum = self.get_event_type_enum();
+        EventSubType::from_str(event_type_enum, &self.event_num.to_string())
+            .unwrap_or(EventSubType::None)
+    }
+
     pub fn get_code_path_from_object_path(
         &self,
         object_path: &std::path::Path,
@@ -92,6 +102,15 @@ impl Event {
             file.set_len(0)?; // create an empty file
         }
         Ok(())
+    }
+
+    pub fn get_code(&self, object_path: &std::path::Path) -> std::io::Result<String> {
+        let path = self.get_code_path_from_object_path(object_path);
+        if path.exists() {
+            std::fs::read_to_string(path)
+        } else {
+            Ok(String::new())
+        }
     }
 }
 

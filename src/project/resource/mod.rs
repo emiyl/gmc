@@ -1,9 +1,9 @@
 mod object;
-mod room;
+pub mod room;
 
 use super::ResourceId;
-use object::Object;
-use room::Room;
+pub use object::Object;
+pub use room::Room;
 
 use serde_json::Value;
 use std::fs;

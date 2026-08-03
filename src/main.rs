@@ -1,9 +1,8 @@
-// mod data_win;
+mod data_win;
 mod project;
-// pub mod types;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use std::path::PathBuf;
+use std::{env, fs, path::PathBuf};
 
 use project::ResourceKind;
 
@@ -11,7 +10,8 @@ use project::ResourceKind;
 #[command(name = "gmc")]
 #[command(author, version, about)]
 pub struct Cli {
-    #[arg(default_value = ".")]
+    /// Project file path or directory containing a .yyp file.
+    #[arg(short, long, value_name = "PROJECT_PATH")]
     pub project: Option<PathBuf>,
 
     #[command(subcommand)]
@@ -178,10 +178,79 @@ pub enum Template {
     Topdown,
 }
 
+fn find_yyp_in_dir(dir: &std::path::Path) -> std::io::Result<PathBuf> {
+    let mut candidates = Vec::new();
+
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.is_file()
+            && path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| ext.eq_ignore_ascii_case("yyp"))
+                .unwrap_or(false)
+        {
+            candidates.push(path);
+        }
+    }
+
+    match candidates.len() {
+        0 => Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("No .yyp file found in directory {}", dir.display()),
+        )),
+        1 => Ok(candidates.remove(0)),
+        _ => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!(
+                "Multiple .yyp files found in {}. Please pass --project to specify one.",
+                dir.display()
+            ),
+        )),
+    }
+}
+
+fn resolve_project_file(project_arg: Option<&PathBuf>) -> std::io::Result<PathBuf> {
+    let candidate = match project_arg {
+        Some(path) => path.clone(),
+        None => env::current_dir()?,
+    };
+
+    if candidate.is_dir() {
+        find_yyp_in_dir(&candidate)
+    } else if candidate
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.eq_ignore_ascii_case("yyp"))
+        .unwrap_or(false)
+    {
+        Ok(candidate)
+    } else {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!(
+                "Project path must be a .yyp file or directory containing a .yyp file: {}",
+                candidate.display()
+            ),
+        ))
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
-    let project_path_buf = cli.project.clone().unwrap_or_else(|| PathBuf::from("."));
-    let project_path = project_path_buf.as_path();
+    let project_file_path = if matches!(&cli.command, Command::New(_)) {
+        None
+    } else {
+        Some(
+            resolve_project_file(cli.project.as_ref()).unwrap_or_else(|e| {
+                eprintln!("Error resolving project: {}", e);
+                std::process::exit(1);
+            }),
+        )
+    };
+    let project_path = project_file_path.as_ref().map(|p| p.as_path());
 
     match &cli.command {
         Command::New(args) => {
@@ -197,6 +266,8 @@ fn main() {
             }
         }
         Command::Add(args) => {
+            let project_path =
+                project_path.expect("Project path must be resolved for non-New commands");
             let mut project = match project::GmProject::load(project_path) {
                 Ok(p) => p,
                 Err(e) => {
@@ -230,6 +301,8 @@ fn main() {
             ObjectCommand::Add {
                 command: AddObjectCommand::Event(event_args),
             } => {
+                let project_path =
+                    project_path.expect("Project path must be resolved for non-New commands");
                 let mut project = match project::GmProject::load(project_path) {
                     Ok(p) => p,
                     Err(e) => {
@@ -257,6 +330,8 @@ fn main() {
             RoomCommand::Add {
                 command: AddRoomCommand::Instance(instance_args),
             } => {
+                let project_path =
+                    project_path.expect("Project path must be resolved for non-New commands");
                 let mut project = match project::GmProject::load(project_path) {
                     Ok(p) => p,
                     Err(e) => {
@@ -282,6 +357,8 @@ fn main() {
             }
         },
         Command::Build => {
+            let project_path =
+                project_path.expect("Project path must be resolved for non-New commands");
             let project = match project::GmProject::load(project_path) {
                 Ok(p) => p,
                 Err(e) => {
@@ -290,7 +367,18 @@ fn main() {
                 }
             };
 
-            // let output = data_win::build_project(&project);
+            let output = data_win::DataWin::from_project(project);
+            let output_path = project_path
+                .parent()
+                .unwrap_or(project_path)
+                .join("build")
+                .join("data.win");
+
+            if let Err(e) = output.save(&output_path) {
+                eprintln!("Error saving build output: {}", e);
+            } else {
+                println!("Build output saved to {}", output_path.display());
+            }
         }
         Command::Clean => {
             println!("Cleaning build output");

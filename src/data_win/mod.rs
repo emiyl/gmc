@@ -2,26 +2,26 @@ mod chunk;
 mod compile;
 mod compiler;
 mod finalize;
+mod instance_type;
 mod layout;
 mod model;
 mod sections;
 mod string_pool;
 
 use std::collections::HashMap;
+use std::path::Path;
 
 use crate::data_win::chunk::ChunkBuilder;
-use crate::data_win::compile::{compile_code_entry, compile_object, compile_room};
+use crate::data_win::compile::{compile_object, compile_room};
 use crate::data_win::finalize::build_form;
 use crate::data_win::layout::WadLayout;
 use crate::data_win::model::{
-    CompiledCodeEntry, CompiledCodeOwner, CompiledFunction, CompiledObject, CompiledRoom,
-    CompiledVariable, Gen8, Optn,
+    CompiledCodeEntry, CompiledFunction, CompiledObject, CompiledRoom, CompiledVariable, Gen8, Optn,
 };
 use crate::data_win::string_pool::StringPool;
 use crate::project::GmProject;
-use crate::types::InstanceType;
-use compiler::Program;
 use compiler::resolver::{Resolver, Variable as ResolvedVariable};
+use instance_type::InstanceType;
 
 pub struct DataWin {
     pub wad_version: u8,
@@ -90,150 +90,74 @@ impl DataWin {
 
         build_form(&mut chunks, &pool)
     }
-}
 
-pub fn build_data_win(code_name: &str, program: Program) -> Vec<u8> {
-    let code_entry = CompiledCodeEntry::new(
-        CompiledCodeOwner::Script {
-            name: code_name.to_string(),
-        },
-        code_name.to_string(),
-        program.bytecode.data,
-    );
+    pub fn from_project(project: GmProject) -> Self {
+        let mut data_win = DataWin::default();
+        let project_root = project
+            .path
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| Path::new(".").to_path_buf());
 
-    DataWin {
-        rooms: vec![CompiledRoom {
-            creation_code_id: 0,
-            ..CompiledRoom::default()
-        }],
-        code: vec![code_entry],
-        variables: program
-            .variables
-            .into_iter()
-            .enumerate()
-            .map(|(index, variable)| {
-                let mut compiled =
-                    CompiledVariable::with_name(strip_scope_prefix(&variable.name), index as i32);
-                if variable.name.starts_with("global.") {
-                    compiled.instance_type = InstanceType::Global as i32;
-                } else if variable.name.starts_with("self.") {
-                    compiled.instance_type = InstanceType::Self_ as i32;
-                } else if variable.name.starts_with("other.") {
-                    compiled.instance_type = InstanceType::Other as i32;
-                } else if variable.name.starts_with("local.") {
-                    compiled.instance_type = InstanceType::Local as i32;
-                } else if variable.name.starts_with("static.") {
-                    compiled.instance_type = InstanceType::Static as i32;
-                } else if variable.name.starts_with("builtin.") {
-                    compiled.instance_type = InstanceType::Builtin as i32;
-                }
-                compiled
-            })
-            .collect(),
-        functions: program
-            .functions
-            .into_iter()
-            .map(|function| CompiledFunction::with_name(function.name))
-            .collect(),
-        ..DataWin::default()
-    }
-    .build()
-}
-
-pub fn build_data_win_multi(
-    code_entries: &[CompiledCodeEntry],
-    variables: &[CompiledVariable],
-    functions: &[CompiledFunction],
-) -> Vec<u8> {
-    DataWin {
-        rooms: vec![CompiledRoom {
-            creation_code_id: if code_entries.is_empty() { -1 } else { 0 },
-            ..CompiledRoom::default()
-        }],
-        code: code_entries.to_vec(),
-        variables: variables.to_vec(),
-        functions: functions.to_vec(),
-        ..DataWin::default()
-    }
-    .build()
-}
-
-pub fn build_data_win_from_gmproject(project: GmProject) -> Vec<u8> {
-    let object_id_by_name = project
-        .objects
-        .iter()
-        .enumerate()
-        .map(|(index, object)| (object.name.clone(), index as u32))
-        .collect::<HashMap<_, _>>();
-
-    let object_name_by_id = object_id_by_name
-        .iter()
-        .map(|(name, id)| (*id, name.clone()))
-        .collect::<HashMap<_, _>>();
-
-    let rooms = project
-        .rooms
-        .into_iter()
-        .map(|room| compile_room(room, &object_id_by_name))
-        .collect::<Vec<_>>();
-
-    let mut resolver = Resolver::new();
-    let code = project
-        .code
-        .iter()
-        .flat_map(|entry| compile_code_entry(entry, &object_id_by_name, &mut resolver))
-        .collect::<Vec<_>>();
-
-    let mut resolved_variables = resolver.variables.values().cloned().collect::<Vec<_>>();
-    resolved_variables.sort_by_key(|variable| variable.var_ref);
-    let variables = resolved_variables
-        .iter()
-        .map(resolved_variable_to_compiled)
-        .collect::<Vec<_>>();
-
-    let mut resolved_functions = resolver.functions.values().cloned().collect::<Vec<_>>();
-    resolved_functions.sort_by_key(|function| function.var_ref);
-    let functions = resolved_functions
-        .into_iter()
-        .map(|function| CompiledFunction::with_name(function.name))
-        .collect::<Vec<_>>();
-
-    let code_lookup = code
-        .iter()
-        .enumerate()
-        .filter_map(|(index, entry)| match &entry.owner {
-            CompiledCodeOwner::ObjectEvent {
-                object_id,
-                event_type,
-                event_num,
-            } => {
-                let object_name = object_name_by_id.get(object_id)?;
-                Some(((object_name.clone(), *event_type, *event_num), index as u32))
+        let mut object_id_by_name: HashMap<String, u32> = HashMap::new();
+        let mut next_object_id = 0;
+        for (name, res) in &project.resources {
+            use crate::project::resource::Resource;
+            if let Resource::Object(_) = res {
+                object_id_by_name.insert(name.clone(), next_object_id);
+                next_object_id += 1;
             }
-            CompiledCodeOwner::Script { .. } => None,
-        })
-        .collect::<HashMap<_, _>>();
+        }
 
-    let objects = project
-        .objects
-        .iter()
-        .map(|object| compile_object(object, &object_id_by_name, &code_lookup))
-        .collect::<Vec<_>>();
+        let mut resolver = Resolver::new();
+        let mut code_lookup: HashMap<(String, i32, i32), u32> = HashMap::new();
+        let mut code_entries: Vec<CompiledCodeEntry> = Vec::new();
 
-    let mut data_win = DataWin {
-        rooms,
-        objects,
-        code,
-        variables,
-        functions,
-        ..DataWin::default()
-    };
+        let resources = project.resources.clone();
+        for (name, res) in resources {
+            use crate::project::resource::Resource;
+            let resource_path = project.get_resource_path(&name).unwrap_or_default();
+            let object_path = project_root.join(resource_path);
 
-    data_win.gen8.room_order = (0..data_win.rooms.len())
-        .map(|index| index as i32)
-        .collect();
+            match res {
+                Resource::Room(room) => {
+                    let compiled_room = compile_room(&room, &object_id_by_name);
+                    data_win.rooms.push(compiled_room);
+                }
+                Resource::Object(object) => {
+                    let compiled_object = compile_object(
+                        &object,
+                        &object_path,
+                        &object_id_by_name,
+                        &mut resolver,
+                        &mut code_lookup,
+                        &mut code_entries,
+                    );
+                    data_win.objects.push(compiled_object);
+                }
+            }
+        }
 
-    data_win.build()
+        data_win.code = code_entries;
+        let mut resolved_functions: Vec<_> = resolver.functions.values().collect();
+        resolved_functions.sort_unstable_by_key(|function| function.var_ref);
+        data_win.functions = resolved_functions
+            .into_iter()
+            .map(|function| CompiledFunction {
+                name: function.name.clone(),
+                occurrences: 0,
+                first_address: -1,
+            })
+            .collect();
+        data_win
+    }
+
+    pub fn save(&self, path: &Path) -> std::io::Result<()> {
+        let data = self.build();
+        std::fs::create_dir_all(path.parent().unwrap_or_else(|| Path::new(".")))?;
+        std::fs::write(path, data)?;
+        Ok(())
+    }
 }
 
 fn strip_scope_prefix(name: &str) -> String {

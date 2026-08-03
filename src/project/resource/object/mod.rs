@@ -6,7 +6,10 @@ use serde_json::Value;
 use std::fs;
 
 use super::{ResourceId, ResourceTrait};
-use crate::project::formatter::format_gamemaker_json;
+use crate::project::{
+    formatter::format_gamemaker_json,
+    resource::object::event::{EventSubType, EventType},
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
@@ -178,5 +181,19 @@ impl Object {
     pub fn add_event(&mut self, event_type: String, event_subtype: Option<String>) {
         let event = Event::new(event_type, event_subtype);
         self.event_list.push(event);
+    }
+
+    pub fn get_event_code_list(
+        &self,
+        object_path: &std::path::Path,
+    ) -> Vec<(EventType, EventSubType, String)> {
+        let mut code_list = Vec::new();
+        for event in &self.event_list {
+            let event_type = event.get_event_type_enum();
+            let event_subtype = event.get_event_subtype_enum();
+            let code = event.get_code(object_path).unwrap_or_default();
+            code_list.push((event_type, event_subtype, code));
+        }
+        code_list
     }
 }

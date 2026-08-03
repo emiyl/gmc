@@ -1,6 +1,8 @@
 mod instance;
 mod layer;
 
+pub use layer::LayerTrait;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs;

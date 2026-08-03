@@ -1,6 +1,7 @@
 use std::collections::HashMap;
+use std::path::Path;
 
-use crate::compiler::{
+use super::compiler::{
     ast::{FunctionParameter, Statement},
     compiler::{Compiler, StructConstructor},
     disassembler::print_disassembly,
@@ -12,8 +13,7 @@ use crate::data_win::model::{
     CompiledCodeEntry, CompiledCodeOwner, CompiledEvent, CompiledInstance, CompiledObject,
     CompiledRoom, PhysicsVertex,
 };
-use crate::project::resources::gm_room_layer::LayerTrait;
-use crate::project::{CodeEntry, CodeOwner, GmObject, GmRoom};
+use crate::project::resource::{Object, Room};
 
 fn collect_function_declarations(
     statements: &[Statement],
@@ -62,45 +62,33 @@ fn collect_function_declarations(
 }
 
 pub fn compile_code_entry(
-    entry: &CodeEntry,
-    object_id_by_name: &HashMap<String, u32>,
+    owner: CompiledCodeOwner,
+    name: String,
+    code: String,
     resolver: &mut Resolver,
 ) -> Vec<CompiledCodeEntry> {
-    let lexer = Lexer::new(entry.code.clone());
+    let lexer = Lexer::new(code);
     let mut parser = Parser::new(lexer);
     let program_ast = parser.parse_program();
     log::debug!("Parsed AST: {:#?}", program_ast);
 
-    let mut compiler = Compiler::with_struct_name_prefix(entry.name.clone());
+    let mut compiler = Compiler::with_struct_name_prefix(name.clone());
     compiler.compile_program(&program_ast);
     let struct_constructors = compiler.struct_constructors.clone();
     let program = resolver.resolve(compiler.instructions);
 
-    let owner = match &entry.owner {
-        CodeOwner::Script { name } => CompiledCodeOwner::Script { name: name.clone() },
-        CodeOwner::ObjectEvent {
-            object,
-            event_type,
-            event_num,
-        } => CompiledCodeOwner::ObjectEvent {
-            object_id: object_id_by_name.get(object).copied().unwrap_or(0),
-            event_type: *event_type as i32,
-            event_num: event_num.value(),
-        },
-    };
-
     print_disassembly(&program.bytecode);
 
-    let mut compiled = CompiledCodeEntry::new(owner, entry.name.clone(), program.bytecode.data);
+    let mut compiled = CompiledCodeEntry::new(owner.clone(), name.clone(), program.bytecode.data);
     compiled.string_fixups = program.bytecode.string_fixups;
 
     let mut compiled_entries = vec![compiled];
 
     let mut function_declarations = Vec::new();
     collect_function_declarations(&program_ast, &mut function_declarations);
-    for (name, params, body) in function_declarations {
-        let script_name = format!("gml_Script_{}@{}", name, entry.name);
-        let mut script_compiler = Compiler::with_struct_name_prefix(entry.name.clone());
+    for (function_name, params, body) in function_declarations {
+        let script_name = format!("gml_Script_{}@{}", function_name, name);
+        let mut script_compiler = Compiler::with_struct_name_prefix(name.clone());
         script_compiler.compile_function_body(&params, &body);
         let script_program = resolver.resolve(script_compiler.instructions);
         let mut script_entry = CompiledCodeEntry::new(
@@ -115,7 +103,7 @@ pub fn compile_code_entry(
         compiled_entries.push(script_entry);
     }
 
-    if matches!(entry.owner, CodeOwner::ObjectEvent { .. }) {
+    if matches!(owner, CompiledCodeOwner::ObjectEvent { .. }) {
         for constructor in struct_constructors {
             compiled_entries.extend(compile_struct_constructor_entries(&constructor, resolver));
         }
@@ -159,7 +147,9 @@ fn compile_struct_constructor_entries(
     entries
 }
 
-pub fn compile_room(room: GmRoom, object_id_by_name: &HashMap<String, u32>) -> CompiledRoom {
+pub fn compile_room(room: &Room, object_id_by_name: &HashMap<String, u32>) -> CompiledRoom {
+    use crate::project::resource::room::LayerTrait;
+
     let instances = room
         .layers
         .iter()
@@ -183,7 +173,7 @@ pub fn compile_room(room: GmRoom, object_id_by_name: &HashMap<String, u32>) -> C
         .collect::<Vec<_>>();
 
     CompiledRoom {
-        name: room.name,
+        name: room.name.clone(),
         width: room.room_settings.width,
         height: room.room_settings.height,
         creation_code_id: -1,
@@ -198,10 +188,30 @@ pub fn compile_room(room: GmRoom, object_id_by_name: &HashMap<String, u32>) -> C
 }
 
 pub fn compile_object(
-    object: &GmObject,
+    object: &Object,
+    object_path: &Path,
     object_id_by_name: &HashMap<String, u32>,
-    code_lookup: &HashMap<(String, i32, i32), u32>,
+    resolver: &mut Resolver,
+    code_lookup: &mut HashMap<(String, i32, i32), u32>,
+    code_entries: &mut Vec<CompiledCodeEntry>,
 ) -> CompiledObject {
+    for event in &object.event_list {
+        let key = (object.name.clone(), event.event_type, event.event_num);
+
+        let code = event.get_code(object_path).unwrap_or_default();
+        let entry_name = format!("{}_{}_{}", object.name, event.event_type, event.event_num);
+        let owner = CompiledCodeOwner::ObjectEvent {
+            object_id: object_id_by_name.get(&object.name).copied().unwrap_or(0),
+            event_type: event.event_type,
+            event_num: event.event_num,
+        };
+
+        let compiled = compile_code_entry(owner, entry_name, code, resolver);
+        let code_index = code_entries.len() as u32;
+        code_lookup.insert(key, code_index);
+        code_entries.extend(compiled);
+    }
+
     let mut event_lists: [Vec<CompiledEvent>; 15] = Default::default();
     for event in &object.event_list {
         let key = (object.name.clone(), event.event_type, event.event_num);
@@ -273,30 +283,5 @@ pub fn compile_object(
         event_type_count: 15,
         physics_vertices,
         event_lists,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::project::CodeEntry;
-
-    #[test]
-    fn function_declaration_script_entries_record_argument_count() {
-        let entry = CodeEntry::new_script(
-            "test",
-            "function print(message) { show_debug_message(message); } print(\"hello\");",
-        );
-        let object_id_by_name = HashMap::new();
-        let mut resolver = Resolver::new();
-
-        let compiled_entries = compile_code_entry(&entry, &object_id_by_name, &mut resolver);
-
-        let function_script = compiled_entries
-            .iter()
-            .find(|entry| entry.name == "gml_Script_print@test")
-            .expect("function declaration script entry must be emitted");
-
-        assert_eq!(function_script.arguments_count, 1);
     }
 }

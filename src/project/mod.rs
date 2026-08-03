@@ -1,6 +1,6 @@
 mod formatter;
 mod options;
-mod resource;
+pub mod resource;
 mod resource_order;
 mod yyp;
 
@@ -14,8 +14,8 @@ use std::{collections::HashMap, path::PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ResourceId {
-    name: String,
-    path: String,
+    pub name: String,
+    pub path: String,
 }
 
 #[derive(Debug, Clone)]
@@ -263,5 +263,13 @@ impl GmProject {
 
     pub fn resource_exists(&self, name: &str) -> bool {
         self.resources.contains_key(name)
+    }
+
+    pub fn get_resource_path(&self, name: &str) -> Option<String> {
+        self.yyp
+            .resources
+            .iter()
+            .find(|resource| resource.id.name == name)
+            .map(|resource| resource.id.path.clone())
     }
 }
