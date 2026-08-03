@@ -60,11 +60,11 @@ impl Default for WindowsOptions {
 
             option_windows_allow_fullscreen_switching: false,
             option_windows_borderless: false,
-            option_windows_company_info: "GMLC".into(),
+            option_windows_company_info: "GMC".into(),
             option_windows_copyright_info: "".into(),
             option_windows_copy_exe_to_dest: false,
             option_windows_d3dswapeffectdiscard: false,
-            option_windows_description_info: "A GMLC Game".into(),
+            option_windows_description_info: "A GMC Game".into(),
             option_windows_disable_sandbox: false,
             option_windows_display_cursor: true,
             option_windows_display_name: "BLANK GAME".into(),
