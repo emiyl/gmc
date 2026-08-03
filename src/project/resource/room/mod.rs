@@ -1,28 +1,17 @@
-//! Parser and data model for GameMaker `.yy` room files (e.g. `Room1.yy`).
-//!
-//! `.yy` files are JSON, but GameMaker's own writer leaves trailing commas
-//! before closing `}` / `]`, which is not valid strict JSON. [`parse_str`]
-//! and [`parse_file`] strip those before handing the text to `serde_json`.
+mod instance;
+mod layer;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs;
-use std::io::Read;
-use std::path::Path;
 
-use crate::project::{
-    formatter::format_gamemaker_json,
-    resources::gm_room_layer::{Instance, Layer},
-};
-
-use super::{Resource, ResourceRef};
-
-// ---------------------------------------------------------------------
-// Top-level room
-// ---------------------------------------------------------------------
+use super::{ResourceId, ResourceTrait};
+use crate::project::formatter::format_gamemaker_json;
+use instance::Instance;
+use layer::{BackgroundLayer, InstanceLayer, Layer};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct GmRoom {
+pub struct Room {
     #[serde(rename = "$GMRoom")]
     pub gm_room: String,
 
@@ -42,7 +31,7 @@ pub struct GmRoom {
     pub inherit_layers: bool,
 
     #[serde(rename = "instanceCreationOrder")]
-    pub instance_creation_order: Vec<ResourceRef>,
+    pub instance_creation_order: Vec<ResourceId>,
 
     #[serde(rename = "isDnd")]
     pub is_dnd: bool,
@@ -51,7 +40,7 @@ pub struct GmRoom {
 
     pub name: String,
 
-    pub parent: ResourceRef,
+    pub parent: ResourceId,
 
     #[serde(rename = "parentRoom")]
     pub parent_room: Option<Value>,
@@ -79,9 +68,9 @@ pub struct GmRoom {
     pub volume: f64,
 }
 
-impl Default for GmRoom {
+impl Default for Room {
     fn default() -> Self {
-        GmRoom {
+        Room {
             gm_room: "v1".to_string(),
             percent_name: "Room1".to_string(),
             creation_code_file: String::new(),
@@ -95,7 +84,7 @@ impl Default for GmRoom {
                 Layer::background_layer("Background", 100),
             ],
             name: "Room1".to_string(),
-            parent: ResourceRef {
+            parent: ResourceId {
                 name: "BLANK GAME".to_string(),
                 path: "BLANK GAME.yyp".to_string(),
             },
@@ -112,64 +101,78 @@ impl Default for GmRoom {
     }
 }
 
-impl Resource for GmRoom {
-    fn get_name(&self) -> &str {
+impl ResourceTrait for Room {
+    fn name(&self) -> &str {
         &self.name
     }
 
-    fn get_path(&self) -> &str {
-        let path = &self.parent.path;
-        println!("Parent path: {}", path);
-        // &format!("rooms/{}/{}.yy", self.name, self.name)
-        path
-    }
-}
-
-impl GmRoom {
-    pub fn new(name: &str, parent: ResourceRef) -> Self {
-        GmRoom {
-            name: name.to_string(),
-            percent_name: name.to_string(),
-            parent,
-            ..GmRoom::default()
-        }
-    }
-
-    pub fn add_instance(&mut self, object_ref: ResourceRef, x: f32, y: f32) {
-        let instance = Instance::new(object_ref, x, y);
-        if let Some(Layer::Instance(instance_layer)) = self.layers.iter_mut().find(|layer| {
-            if let Layer::Instance(instance_layer) = layer {
-                instance_layer.display_name == "Instances"
-            } else {
-                false
-            }
-        }) {
-            let instance_ref = ResourceRef {
-                name: instance.name.clone(),
-                path: format!("rooms/{}/{}.yy", self.name, self.name),
-            };
-            instance_layer.add_instance(instance);
-            self.instance_creation_order.push(instance_ref);
-        } else {
-            eprintln!("No instance layer found to add the instance.");
-        }
-    }
-
-    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, YyError> {
-        // read as json5
-        let mut file = fs::File::open(path)?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
-        let value: Value = json5::from_str(&contents).expect("Failed to parse JSON5");
-        let room: GmRoom = serde_json::from_value(value).expect("Failed to deserialize GmRoom");
-        Ok(room)
-    }
-
-    pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), YyError> {
-        let value = serde_json::to_value(self)?;
+    fn save(&self, path: &std::path::Path) -> std::io::Result<()> {
+        let value = serde_json::to_value(self).expect("Failed to serialize Room");
         let json = format_gamemaker_json(&value);
         fs::write(path, json)?;
         Ok(())
+    }
+
+    fn default_path(&self) -> String {
+        format!("rooms/{}/{}.yy", self.name, self.name)
+    }
+}
+
+impl Room {
+    pub fn new(name: &str, parent: ResourceId) -> Self {
+        Room {
+            name: name.to_string(),
+            percent_name: name.to_string(),
+            parent,
+            ..Room::default()
+        }
+    }
+
+    pub fn load(value: Value) -> std::io::Result<Self> {
+        let room: Room = serde_json::from_value(value).expect("Failed to deserialize Room");
+        Ok(room)
+    }
+
+    pub fn add_instance_layer(&mut self, layer_name: &str) -> &mut InstanceLayer {
+        let new_layer = Layer::instance_layer(layer_name, self.layers.len() as i32);
+        self.layers.push(new_layer);
+        if let Layer::Instance(layer) = self.layers.last_mut().unwrap() {
+            layer
+        } else {
+            panic!("Last layer is not an instance layer");
+        }
+    }
+
+    pub fn add_background_layer(&mut self, layer_name: &str) -> &mut BackgroundLayer {
+        let new_layer = Layer::background_layer(layer_name, self.layers.len() as i32);
+        self.layers.push(new_layer);
+        if let Layer::Background(layer) = self.layers.last_mut().unwrap() {
+            layer
+        } else {
+            panic!("Last layer is not a background layer");
+        }
+    }
+
+    pub fn add_instance(&mut self, room_id: ResourceId, object_id: ResourceId, x: f32, y: f32) {
+        let instance = Instance::new(object_id, x, y);
+
+        let resource_id = ResourceId {
+            name: instance.name.clone(),
+            path: room_id.path.clone(),
+        };
+
+        if let Some(Layer::Instance(layer)) = self
+            .layers
+            .iter_mut()
+            .find(|layer| matches!(layer, Layer::Instance(_)))
+        {
+            layer.instances.push(instance);
+        } else {
+            let layer = self.add_instance_layer("Instances");
+            layer.instances.push(instance);
+        }
+
+        self.instance_creation_order.push(resource_id);
     }
 }
 
@@ -287,38 +290,5 @@ impl Default for View {
             yport: 0,
             yview: 0,
         }
-    }
-}
-
-// ---------------------------------------------------------------------
-// Parsing
-// ---------------------------------------------------------------------
-
-#[derive(Debug)]
-pub enum YyError {
-    Io(std::io::Error),
-    Json(serde_json::Error),
-}
-
-impl std::fmt::Display for YyError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            YyError::Io(e) => write!(f, "I/O error reading .yy file: {e}"),
-            YyError::Json(e) => write!(f, "JSON error parsing .yy file: {e}"),
-        }
-    }
-}
-
-impl std::error::Error for YyError {}
-
-impl From<std::io::Error> for YyError {
-    fn from(e: std::io::Error) -> Self {
-        YyError::Io(e)
-    }
-}
-
-impl From<serde_json::Error> for YyError {
-    fn from(e: serde_json::Error) -> Self {
-        YyError::Json(e)
     }
 }

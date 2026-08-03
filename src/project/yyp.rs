@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::io::Read;
 
-use crate::project::{formatter::format_gamemaker_json, resources::ResourceType};
+use crate::project::{ResourceId, formatter::format_gamemaker_json};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GmProjectYyp {
@@ -92,25 +92,6 @@ impl GmProjectYyp {
         }
     }
 
-    pub fn add_resource(&mut self, resource_type: ResourceType, name: &str, path: &str) {
-        let resource_id = ResourceId {
-            name: name.to_string(),
-            path: path.to_string(),
-        };
-
-        let resource = Resource {
-            id: resource_id.clone(),
-        };
-        self.resources.push(resource);
-
-        if resource_type == ResourceType::Room {
-            let room_order_node = RoomOrderNode {
-                room_id: resource_id,
-            };
-            self.room_order_nodes.push(room_order_node);
-        }
-    }
-
     pub fn load<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Self> {
         let mut file = std::fs::File::open(path)?;
         let mut contents = String::new();
@@ -127,6 +108,15 @@ impl GmProjectYyp {
         let json = format_gamemaker_json(&value);
         std::fs::write(path, json)?;
         Ok(())
+    }
+
+    pub fn add_resource(&mut self, name: String, path: String) {
+        self.resources.push(Resource {
+            id: ResourceId {
+                name: name,
+                path: path,
+            },
+        });
     }
 }
 
@@ -198,12 +188,6 @@ pub struct Resource {
 pub struct RoomOrderNode {
     #[serde(rename = "roomId")]
     pub room_id: ResourceId,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ResourceId {
-    pub name: String,
-    pub path: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -333,7 +333,7 @@ impl Compiler {
     fn next_temp_name(&mut self, prefix: &str) -> String {
         let id = self.temp_counter;
         self.temp_counter += 1;
-        format!("__gmlc_{}_{}", prefix, id)
+        format!("__gmc_{}_{}", prefix, id)
     }
 
     fn emit_stacktop_marker(&mut self) {

@@ -3,8 +3,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::io::Read;
 
-use super::resources::ResourceType;
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ResourceOrder {
     #[serde(rename = "FolderOrderSettings")]
@@ -30,15 +28,8 @@ impl Default for ResourceOrder {
 }
 
 impl ResourceOrderSettingsItem {
-    pub fn new(name: String, order: i32, resource_type: ResourceType) -> Self {
-        ResourceOrderSettingsItem {
-            name: name.clone(),
-            order,
-            path: match resource_type {
-                ResourceType::Object => format!("objects/{}/{}.yy", name, name),
-                _ => "".to_string(),
-            },
-        }
+    pub fn new(name: String, order: i32, path: String) -> Self {
+        ResourceOrderSettingsItem { name, order, path }
     }
 }
 
@@ -50,12 +41,7 @@ impl ResourceOrder {
         }
     }
 
-    pub fn add_resource(&mut self, name: String, resource_type: ResourceType) {
-        if resource_type == ResourceType::Room {
-            // For rooms, we don't add them to the resource order settings
-            return;
-        }
-
+    pub fn add_resource(&mut self, name: String, path: String) {
         let last_order = self
             .resource_order_settings
             .iter()
@@ -63,8 +49,8 @@ impl ResourceOrder {
             .max()
             .unwrap_or(0);
 
-        let new_item = ResourceOrderSettingsItem::new(name, last_order + 1, resource_type);
-        self.resource_order_settings.push(new_item);
+        self.resource_order_settings
+            .push(ResourceOrderSettingsItem::new(name, last_order + 1, path));
     }
 
     pub fn save<P: AsRef<std::path::Path>>(&self, path: P) -> std::io::Result<()> {

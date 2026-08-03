@@ -72,6 +72,31 @@ impl Parser {
         self.advance();
     }
 
+    fn consume_statement_terminator(&mut self) {
+        if self.current == Token::Semicolon {
+            self.advance();
+            return;
+        }
+
+        if self.current == Token::CommentSingleLine {
+            self.advance();
+            if self.current == Token::Newline {
+                self.advance();
+            }
+            return;
+        }
+
+        if self.current == Token::Newline {
+            self.advance();
+            return;
+        }
+
+        panic!(
+            "Expected ';' or newline, got {:?} at line {}, token {}",
+            self.current, self.current_line, self.line_token_position
+        );
+    }
+
     pub fn parse_program(&mut self) -> Vec<Statement> {
         let mut statements = Vec::new();
 
@@ -175,7 +200,7 @@ impl Parser {
         self.expect(Token::LeftParen);
         let condition = self.parse_expression();
         self.expect(Token::RightParen);
-        self.expect(Token::Semicolon);
+        self.consume_statement_terminator();
 
         Statement::DoUntil { body, condition }
     }
@@ -189,7 +214,7 @@ impl Parser {
             None
         } else {
             let stmt = self.parse_for_clause_statement();
-            self.expect(Token::Semicolon);
+            self.consume_statement_terminator();
             Some(Box::new(stmt))
         };
 
@@ -198,7 +223,7 @@ impl Parser {
             None
         } else {
             let expr = self.parse_expression();
-            self.expect(Token::Semicolon);
+            self.consume_statement_terminator();
             Some(expr)
         };
 
@@ -760,7 +785,7 @@ impl Parser {
             }
             Token::Semicolon => {
                 if needs_semicolon {
-                    self.expect(Token::Semicolon);
+                    self.consume_statement_terminator();
                 }
                 Statement::Expression(self.build_access_read_expr(&target))
             }
@@ -768,14 +793,14 @@ impl Parser {
                 let expr = self.build_access_read_expr(&target);
                 let expr = self.parse_expression_with_left(expr);
                 if needs_semicolon {
-                    self.expect(Token::Semicolon);
+                    self.consume_statement_terminator();
                 }
                 return Statement::Expression(expr);
             }
         };
 
         if needs_semicolon {
-            self.expect(Token::Semicolon);
+            self.consume_statement_terminator();
         }
         statement
     }
@@ -785,7 +810,7 @@ impl Parser {
         self.expect(Token::Equals);
         let value = self.parse_expression();
         if needs_semicolon {
-            self.expect(Token::Semicolon);
+            self.consume_statement_terminator();
         }
 
         Statement::Assignment { name, value }
@@ -802,7 +827,7 @@ impl Parser {
 
         let right = self.parse_expression();
         if needs_semicolon {
-            self.expect(Token::Semicolon);
+            self.consume_statement_terminator();
         }
 
         let value = Expr::Binary {
@@ -823,7 +848,7 @@ impl Parser {
         self.advance(); // consume identifier
         self.advance(); // consume ++ or --
         if needs_semicolon {
-            self.expect(Token::Semicolon);
+            self.consume_statement_terminator();
         }
 
         let value = Expr::Binary {
@@ -849,7 +874,7 @@ impl Parser {
 
         self.advance(); // consume identifier
         if needs_semicolon {
-            self.expect(Token::Semicolon);
+            self.consume_statement_terminator();
         }
 
         let value = Expr::Binary {
@@ -978,8 +1003,13 @@ impl Parser {
             return Statement::Return(None);
         }
 
+        if self.current == Token::Newline || self.current == Token::CommentSingleLine {
+            self.consume_statement_terminator();
+            return Statement::Return(None);
+        }
+
         let expr = self.parse_expression();
-        self.expect(Token::Semicolon);
+        self.consume_statement_terminator();
         Statement::Return(Some(expr))
     }
 
@@ -1072,7 +1102,7 @@ impl Parser {
         }
 
         if needs_semicolon {
-            self.expect(Token::Semicolon);
+            self.consume_statement_terminator();
         }
         Statement::VarDeclaration { declarations }
     }
@@ -1084,7 +1114,7 @@ impl Parser {
         };
         let var_name = var_name.clone();
         self.advance();
-        self.expect(Token::Semicolon);
+        self.consume_statement_terminator();
         Statement::GlobalVarDeclaration { name: var_name }
     }
 
@@ -1104,7 +1134,7 @@ impl Parser {
         };
 
         if needs_semicolon {
-            self.expect(Token::Semicolon);
+            self.consume_statement_terminator();
         }
         Statement::StaticDeclaration {
             name: var_name,
@@ -1131,12 +1161,12 @@ impl Parser {
                 "switch" => return self.parse_switch_statement(),
                 "break" => {
                     self.advance();
-                    self.expect(Token::Semicolon);
+                    self.consume_statement_terminator();
                     return Statement::Break;
                 }
                 "continue" => {
                     self.advance();
-                    self.expect(Token::Semicolon);
+                    self.consume_statement_terminator();
                     return Statement::Continue;
                 }
                 "return" => return self.parse_return_statement(),
@@ -1187,7 +1217,7 @@ impl Parser {
                     }
                     Token::LeftParen => {
                         let expr = self.parse_expression();
-                        self.expect(Token::Semicolon);
+                        self.consume_statement_terminator();
                         return Statement::Expression(expr);
                     }
                     _ => {}
@@ -1202,7 +1232,7 @@ impl Parser {
 
         // Otherwise, it's an expression statement.
         let expr = self.parse_expression();
-        self.expect(Token::Semicolon);
+        self.consume_statement_terminator();
 
         Statement::Expression(expr)
     }
@@ -1572,5 +1602,34 @@ mod tests {
             format!("{:?}", program[0]),
             "VarDeclaration { declarations: [(\"x\", Some(Call { name: \"@@NewGMLArray@@\", args: [Positional(Integer(1)), Positional(Integer(2))] }))] }"
         );
+    }
+
+    #[test]
+    fn parse_assignment_without_semicolon_when_followed_by_newline() {
+        let input = "x = 1\ny = 2;";
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+
+        let program = parser.parse_program();
+        assert_eq!(program.len(), 2);
+        assert_eq!(
+            format!("{:?}", program[0]),
+            "Assignment { name: \"x\", value: Integer(1) }"
+        );
+        assert_eq!(
+            format!("{:?}", program[1]),
+            "Assignment { name: \"y\", value: Integer(2) }"
+        );
+    }
+
+    #[test]
+    fn parse_expression_statement_without_semicolon_when_followed_by_newline() {
+        let input = "show_debug_message(\"hi\")\n";
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+
+        let program = parser.parse_program();
+        assert_eq!(program.len(), 1);
+        assert!(matches!(program[0], Statement::Expression(_)));
     }
 }

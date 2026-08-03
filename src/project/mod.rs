@@ -1,131 +1,108 @@
 mod formatter;
-mod gm_project;
 mod options;
+mod resource;
 mod resource_order;
-pub mod resources;
+mod yyp;
 
-use gm_project::GmProjectYyp;
 use options::Options;
-use resource_order::ResourceOrder;
-pub use resources::{
-    CodeEntry, EventSubType, EventType, GmObject, GmRoom, ResourceRef, ResourceType,
-};
+pub use resource::{Resource, ResourceKind, ResourceTrait};
+pub use resource_order::ResourceOrder;
+use yyp::GmProjectYyp;
 
-pub use crate::project::resources::CodeOwner;
+use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, path::PathBuf};
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ResourceId {
+    name: String,
+    path: String,
+}
 
 #[derive(Debug, Clone)]
 pub struct GmProject {
+    pub path: PathBuf,
+    pub resource_id: ResourceId,
     pub yyp: GmProjectYyp,
     pub resource_order: ResourceOrder,
     pub options: Options,
-    pub rooms: Vec<GmRoom>,
-    pub objects: Vec<GmObject>,
-    pub code: Vec<CodeEntry>,
+    pub resources: HashMap<String, Resource>,
 }
 
 impl GmProject {
-    pub fn new(name: &str) -> Self {
+    pub fn new(name: &str, path: &PathBuf) -> Self {
+        let file_name = path
+            .file_name()
+            .expect("Failed to get file name")
+            .to_string_lossy()
+            .to_string();
+
         GmProject {
+            path: path.clone(),
+            resource_id: ResourceId {
+                name: name.to_string(),
+                path: file_name,
+            },
             yyp: GmProjectYyp::new(name),
             resource_order: ResourceOrder::new(),
             options: Options::new(name),
-            rooms: Vec::new(),
-            objects: Vec::new(),
-            code: Vec::new(),
+            resources: HashMap::new(),
         }
     }
 
-    pub fn save(&self, project_path: &std::path::Path) -> std::io::Result<()> {
-        let parent_dir = project_path
-            .parent()
-            .expect("Failed to get parent directory of project path");
+    pub fn save(&self) -> std::io::Result<()> {
+        let parent_dir = self.path.parent().expect("Failed to get parent directory");
+
+        // Create the parent directory if it doesn't exist
         if !parent_dir.exists() {
             std::fs::create_dir_all(parent_dir)?;
         }
 
-        let datafiles_path = parent_dir.join("datafiles");
-        if !datafiles_path.exists() {
-            std::fs::create_dir_all(&datafiles_path)?;
-        }
+        // Save the project file
+        self.yyp
+            .save(&std::path::Path::new(&self.path))
+            .expect("Failed to save project file");
 
+        // Save the resource order file
+        let resource_order_path =
+            parent_dir.join(format!("{}.resource_order", self.resource_id.name.clone()));
+        self.resource_order
+            .save(&resource_order_path)
+            .expect("Failed to save resource order");
+
+        // Save the options files
         let options_path = parent_dir.join("options");
         self.options
             .save(&options_path)
             .expect("Failed to save options");
 
-        self.yyp
-            .save(&project_path)
-            .expect("Failed to save project file");
-
-        let resource_order_path = parent_dir.join(format!("{}.resource_order", self.yyp.name));
-        self.resource_order
-            .save(&resource_order_path)
-            .expect("Failed to save resource order");
-
-        let rooms_dir = parent_dir.join("rooms");
-        let rooms_vec = &self.rooms;
-        if !rooms_vec.is_empty() {
-            if !rooms_dir.exists() {
-                std::fs::create_dir_all(&rooms_dir)?;
-            }
-            for room in rooms_vec {
-                let room_dir = rooms_dir.join(&room.name);
-                if !room_dir.exists() {
-                    std::fs::create_dir_all(&room_dir)?;
-                }
-                let room_file_path = room_dir.join(format!("{}.yy", room.name));
-                room.save(&room_file_path)
-                    .expect("Failed to save room file");
-            }
+        // Create the datafiles directory if it doesn't exist
+        let datafiles_path = parent_dir.join("datafiles");
+        if !datafiles_path.exists() {
+            std::fs::create_dir_all(&datafiles_path)?;
         }
 
-        let objects_dir = parent_dir.join("objects");
-        let objects_vec = &self.objects;
-        if !objects_vec.is_empty() {
-            if !objects_dir.exists() {
-                std::fs::create_dir_all(&objects_dir)?;
-            }
-            for object in objects_vec {
-                let object_dir = objects_dir.join(&object.name);
-                if !object_dir.exists() {
-                    std::fs::create_dir_all(&object_dir)?;
-                }
-                let object_file_path = object_dir.join(format!("{}.yy", object.name));
-                object
-                    .save(&object_file_path)
-                    .expect("Failed to save object file");
-            }
-        }
+        // self.resources is a hashmap of strings and resources
+        // self.yyp.resources is a vec of ResourceId, which has a name and a path
+        // We need to let resources = a map of self.yyp.resources, so we can know where the path is
+        let resources: HashMap<String, (String, &Resource)> = self
+            .yyp
+            .resources
+            .iter()
+            .filter_map(|resource| {
+                let resource_name = &resource.id.name;
+                let resource_path = &resource.id.path;
 
-        let code_vec = &self.code;
-        if !code_vec.is_empty() {
-            for code_entry in code_vec {
-                let code_file_path = match &code_entry.owner {
-                    CodeOwner::ObjectEvent {
-                        object,
-                        event_type,
-                        event_num,
-                    } => {
-                        let object_dir = objects_dir.join(object);
-                        if !object_dir.exists() {
-                            std::fs::create_dir_all(&object_dir)?;
-                        }
-                        object_dir.join(format!(
-                            "{}_{}.gml",
-                            event_type.as_str(),
-                            event_num.value()
-                        ))
-                    }
-                    CodeOwner::Script { name: _ } => parent_dir.join("scripts"),
-                };
-                if !code_file_path.parent().unwrap().exists() {
-                    std::fs::create_dir_all(code_file_path.parent().unwrap())?;
-                }
-                println!("Saving code entry to: {:?}", code_file_path);
-                code_entry
-                    .save(&code_file_path)
-                    .expect("Failed to save code entry");
-            }
+                self.resources
+                    .get(resource_name)
+                    .map(|res| (resource_name.clone(), (resource_path.clone(), res)))
+            })
+            .collect();
+
+        for (_, (resource_path, resource)) in resources {
+            let full_resource_path = parent_dir.join(&resource_path);
+            resource
+                .save(&full_resource_path)
+                .expect("Failed to save resource");
         }
 
         Ok(())
@@ -134,205 +111,157 @@ impl GmProject {
     pub fn load(project_file_path: &std::path::Path) -> std::io::Result<Self> {
         let yyp = GmProjectYyp::load(&project_file_path).expect("Failed to load project file");
 
+        let file_name = project_file_path
+            .file_name()
+            .expect("Failed to get file name")
+            .to_string_lossy()
+            .to_string();
+        let resource_id = ResourceId {
+            name: yyp.name.clone(),
+            path: file_name,
+        };
+
         let project_path = project_file_path
             .parent()
             .expect("Failed to get project directory");
-        let project_name = project_file_path
-            .file_stem()
-            .expect("Failed to get project name")
-            .to_string_lossy();
 
-        let resource_order_path = project_path.join(format!("{}.resource_order", project_name));
+        let resource_order_path = project_path.join(format!("{}.resource_order", resource_id.name));
         let resource_order =
             ResourceOrder::load(&resource_order_path).expect("Failed to load resource order");
 
         let options_path = project_path.join("options");
         let options = Options::load(&options_path).expect("Failed to load options");
 
-        // load rooms
-        // room dir is <project_path>/rooms
-        let mut rooms_vec = Vec::new();
-        let rooms_dir = project_path.join("rooms");
-        if rooms_dir.exists() {
-            for entry in std::fs::read_dir(&rooms_dir).expect("Failed to read rooms directory") {
-                let entry = entry.expect("Failed to read room entry");
-                let path = entry.path();
-
-                // now check if the folder has a .yy file with the same name as the folder
-                if path.is_dir() {
-                    // Get the room name from the folder name
-                    let room_name = path
-                        .file_name()
-                        .expect("Failed to get room folder name")
-                        .to_string_lossy();
-                    let room_file_path = path.join(format!("{}.yy", room_name));
-
-                    if room_file_path.exists() {
-                        let room = GmRoom::load(&room_file_path).expect("Failed to load room");
-                        rooms_vec.push(room.clone());
-                    }
-                }
-            }
-        }
-
-        // load objects
-        let mut objects_vec = Vec::new();
-        let objects_dir = project_path.join("objects");
-        if objects_dir.exists() {
-            for entry in std::fs::read_dir(&objects_dir).expect("Failed to read objects directory")
-            {
-                let entry = entry.expect("Failed to read object entry");
-                let path = entry.path();
-
-                // now check if the folder has a .yy file with the same name as the folder
-                if path.is_dir() {
-                    // Get the object name from the folder name
-                    let object_name = path
-                        .file_name()
-                        .expect("Failed to get object folder name")
-                        .to_string_lossy();
-                    let object_file_path = path.join(format!("{}.yy", object_name));
-
-                    if object_file_path.exists() {
-                        let object =
-                            GmObject::load(&object_file_path).expect("Failed to load object");
-                        objects_vec.push(object.clone());
-                    }
-                }
-            }
-        }
-
-        // "objects/<object_name>/<code_name>.gml"
-        let mut code_vec = Vec::new();
-        for object in &objects_vec {
-            let object_dir = objects_dir.join(&object.name);
-            if object_dir.exists() {
-                for entry in
-                    std::fs::read_dir(&object_dir).expect("Failed to read object directory")
-                {
-                    let entry = entry.expect("Failed to read code entry");
-                    let path = entry.path();
-
-                    if path.is_file() && path.extension().map_or(false, |ext| ext == "gml") {
-                        let code_entry = CodeEntry::load(&path).expect("Failed to load code entry");
-                        code_vec.push(code_entry);
-                    }
-                }
-            }
+        let mut resources = HashMap::new();
+        for resource in &yyp.resources {
+            let resource_path = project_path.join(&resource.id.path);
+            let loaded_resource = Resource::load(&resource_path).expect("Failed to load resource");
+            resources.insert(resource.id.name.clone(), loaded_resource);
         }
 
         Ok(GmProject {
+            path: project_file_path.to_path_buf(),
+            resource_id,
             yyp,
             resource_order,
             options,
-            rooms: rooms_vec,
-            objects: objects_vec,
-            code: code_vec,
+            resources,
         })
     }
 
-    pub fn add_resource(&mut self, resource_type: ResourceType, name: &str) {
-        match resource_type {
-            ResourceType::Room => self.add_room(name),
-            ResourceType::Object => self.add_object(name),
+    pub fn get_id_from_resource_name(&self, name: &str) -> Option<&ResourceId> {
+        self.yyp
+            .resources
+            .iter()
+            .find(|resource| resource.id.name == name)
+            .map(|resource| &resource.id)
+    }
+
+    pub fn add_resource(&mut self, name: &str, resource_kind: ResourceKind) -> std::io::Result<()> {
+        let resource = Resource::new(name, resource_kind.clone(), self.resource_id.clone());
+        let resource_name = resource.name().to_string();
+        let resource_path = resource.default_path();
+
+        if self.resource_exists(name) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                format!("Resource with name '{}' already exists", name),
+            ));
+        }
+
+        // Add the resource to the resources hashmap
+        self.resources.insert(resource_name.clone(), resource);
+
+        // Add the resource to the yyp file
+        self.yyp
+            .add_resource(resource_name.clone(), resource_path.clone());
+
+        match resource_kind {
+            ResourceKind::Room => {}
+            _ => {
+                self.resource_order
+                    .add_resource(resource_name.clone(), resource_path);
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn add_event_to_object(
+        &mut self,
+        object_name: &str,
+        event_type: String,
+        event_code: Option<String>,
+    ) -> std::io::Result<()> {
+        if let Some(resource) = self.resources.get_mut(object_name) {
+            if let ResourceKind::Object = resource.kind() {
+                let object = resource.as_object_mut().expect("Resource is not an object");
+                object.add_event(event_type, event_code);
+                Ok(())
+            } else {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("Resource '{}' is not an object", object_name),
+                ))
+            }
+        } else {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("Object '{}' not found", object_name),
+            ))
         }
     }
 
-    fn add_room(&mut self, name: &str) {
-        let parent = ResourceRef {
-            name: self.yyp.name.clone(),
-            path: format!("{}.yyp", self.yyp.name),
-        };
-        self.yyp.add_resource(
-            ResourceType::Room,
-            name,
-            format!("rooms/{}/{}.yy", name, name).as_str(),
-        );
-        let room = GmRoom::new(name, parent);
-        self.rooms.push(room);
-    }
-
-    fn add_object(&mut self, name: &str) {
-        let parent = ResourceRef {
-            name: self.yyp.name.clone(),
-            path: format!("{}.yyp", self.yyp.name),
-        };
-        self.yyp.add_resource(
-            ResourceType::Object,
-            name,
-            format!("objects/{}/{}.yy", name, name).as_str(),
-        );
-        self.resource_order
-            .add_resource(name.to_string(), ResourceType::Object);
-        let object = GmObject::new(name, parent);
-        self.objects.push(object);
-    }
-
-    pub fn add_object_to_room(
+    pub fn add_instance_to_room(
         &mut self,
         room_name: &str,
         object_name: &str,
         x: f32,
         y: f32,
     ) -> std::io::Result<()> {
-        // Find the room by name
-        if let Some(room) = self.rooms.iter_mut().find(|r| r.name == room_name) {
-            // Check if object exists in the project
-            if !self.objects.iter().any(|o| o.name == object_name) {
-                return Err(std::io::Error::new(
+        let object_id = self
+            .get_id_from_resource_name(object_name)
+            .ok_or_else(|| {
+                std::io::Error::new(
                     std::io::ErrorKind::NotFound,
-                    format!("Object '{}' not found in project", object_name),
-                ));
-            }
+                    format!("Resource ID for '{}' not found", object_name),
+                )
+            })?
+            .clone();
 
-            // Add the object to the room's instances
-            let object_ref = ResourceRef {
-                name: object_name.to_string(),
-                path: format!("objects/{}/{}.yy", object_name, object_name),
-            };
+        let room_id = self
+            .get_id_from_resource_name(room_name)
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("Resource ID for '{}' not found", room_name),
+                )
+            })?
+            .clone();
 
-            room.add_instance(object_ref, x, y);
-            Ok(())
-        } else {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!("Room '{}' not found", room_name),
-            ))
-        }
-    }
+        let room = self
+            .resources
+            .get_mut(room_name)
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("Room '{}' not found", room_name),
+                )
+            })?
+            .as_room_mut()
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("Resource '{}' is not a room", room_name),
+                )
+            })?;
 
-    pub fn add_event_to_object(
-        &mut self,
-        project_path: &std::path::PathBuf,
-        object_name: &str,
-        event_type: EventType,
-        event_subtype: EventSubType,
-        code: Option<String>,
-    ) -> std::io::Result<()> {
-        // Find the object by name
-        if let Some(object) = self.objects.iter_mut().find(|o| o.name == object_name) {
-            // Add the event to the object's events
-            object.add_event(event_type, event_subtype.clone());
-        } else {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!("Object '{}' not found", object_name),
-            ));
-        }
-
-        // Write code to file or create file
-        let event_type_str = event_type.as_str();
-        let event_num = event_subtype.value();
-        let code_file_path = format!(
-            "objects/{}/{}_{}.gml",
-            object_name, event_type_str, event_num
-        );
-        let full_path = project_path.parent().unwrap().join(&code_file_path);
-        std::fs::File::create(&full_path)?;
-        if let Some(code) = code {
-            std::fs::write(&full_path, code)?;
-        }
+        room.add_instance(room_id, object_id, x, y);
 
         Ok(())
+    }
+
+    pub fn resource_exists(&self, name: &str) -> bool {
+        self.resources.contains_key(name)
     }
 }

@@ -1,18 +1,16 @@
+mod event;
+use event::Event;
+
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::fs;
-use std::io::Read;
-use std::path::Path;
 
-use crate::project::{
-    formatter::format_gamemaker_json,
-    resources::event_type::{EventSubType, EventType},
-};
+use super::{ResourceId, ResourceTrait};
+use crate::project::formatter::format_gamemaker_json;
 
-use super::{Resource, ResourceRef};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
-pub struct GmObject {
+pub struct Object {
     #[serde(rename = "$GMObject")]
     pub gm_object: String,
 
@@ -28,10 +26,10 @@ pub struct GmObject {
     #[serde(rename = "overriddenProperties")]
     pub overridden_properties: Vec<serde_json::Value>,
 
-    pub parent: ResourceRef,
+    pub parent: ResourceId,
 
     #[serde(rename = "parentObjectId")]
-    pub parent_object_id: Option<ResourceRef>,
+    pub parent_object_id: Option<ResourceId>,
 
     pub persistent: bool,
 
@@ -82,61 +80,15 @@ pub struct GmObject {
     pub solid: bool,
 
     #[serde(rename = "spriteId")]
-    pub sprite_id: Option<ResourceRef>,
+    pub sprite_id: Option<ResourceId>,
 
     #[serde(rename = "spriteMaskId")]
-    pub sprite_mask_id: Option<ResourceRef>,
+    pub sprite_mask_id: Option<ResourceId>,
 
     pub visible: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct Event {
-    #[serde(rename = "$GMEvent")]
-    pub gm_event: String,
-
-    #[serde(rename = "%Name")]
-    pub display_name_internal: String,
-
-    #[serde(rename = "collisionObjectId")]
-    pub collision_object_id: Option<ResourceRef>,
-
-    #[serde(rename = "eventNum")]
-    pub event_num: i32,
-
-    #[serde(rename = "eventType")]
-    pub event_type: i32,
-
-    #[serde(rename = "isDnD")]
-    pub is_dnd: bool,
-
-    pub name: String,
-
-    #[serde(rename = "resourceType")]
-    pub resource_type: String,
-
-    #[serde(rename = "resourceVersion")]
-    pub resource_version: String,
-}
-
-impl Default for Event {
-    fn default() -> Self {
-        Self {
-            gm_event: "v1".into(),
-            display_name_internal: "".into(),
-            collision_object_id: None,
-            event_num: (&EventSubType::None).into(),
-            event_type: EventType::Create as i32,
-            is_dnd: false,
-            name: "".into(),
-            resource_type: "GMEvent".into(),
-            resource_version: "2.0".into(),
-        }
-    }
-}
-
-impl Default for GmObject {
+impl Default for Object {
     fn default() -> Self {
         Self {
             gm_object: "".into(),
@@ -149,7 +101,7 @@ impl Default for GmObject {
 
             overridden_properties: Vec::new(),
 
-            parent: ResourceRef {
+            parent: ResourceId {
                 name: "BLANK GAME".into(),
                 path: "BLANK GAME.yyp".into(),
             },
@@ -186,8 +138,30 @@ impl Default for GmObject {
     }
 }
 
-impl GmObject {
-    pub fn new(name: &str, parent: ResourceRef) -> Self {
+impl ResourceTrait for Object {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn save(&self, path: &std::path::Path) -> std::io::Result<()> {
+        let value = serde_json::to_value(self).expect("Failed to serialize Object");
+        let json = format_gamemaker_json(&value);
+        fs::write(path, json)?;
+
+        for event in &self.event_list {
+            event.ensure_file_exists(path)?;
+        }
+
+        Ok(())
+    }
+
+    fn default_path(&self) -> String {
+        format!("objects/{}/{}.yy", self.name, self.name)
+    }
+}
+
+impl Object {
+    pub fn new(name: &str, parent: ResourceId) -> Self {
         Self {
             display_name_internal: name.to_string(),
             name: name.to_string(),
@@ -196,40 +170,13 @@ impl GmObject {
         }
     }
 
-    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
-        // read as json5
-        let mut file = fs::File::open(path)?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
-        let value: serde_json::Value = json5::from_str(&contents)?;
-        let object: GmObject = serde_json::from_value(value)?;
+    pub fn load(value: Value) -> std::io::Result<Self> {
+        let object: Object = serde_json::from_value(value).expect("Failed to deserialize Object");
         Ok(object)
     }
 
-    pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), Box<dyn std::error::Error>> {
-        let value = serde_json::to_value(self)?;
-        let json = format_gamemaker_json(&value);
-        fs::write(path, json)?;
-        Ok(())
-    }
-
-    pub fn add_event(&mut self, event_type: EventType, event_subtype: EventSubType) {
-        let event = Event {
-            event_type: event_type as i32,
-            event_num: event_subtype.value(),
-            name: format!("{}_{}", event_type.as_str(), event_subtype.value()),
-            ..Default::default()
-        };
+    pub fn add_event(&mut self, event_type: String, event_subtype: Option<String>) {
+        let event = Event::new(event_type, event_subtype);
         self.event_list.push(event);
-    }
-}
-
-impl Resource for GmObject {
-    fn get_name(&self) -> &str {
-        &self.name
-    }
-
-    fn get_path(&self) -> &str {
-        &self.parent.path
     }
 }

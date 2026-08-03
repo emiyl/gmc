@@ -1,5 +1,6 @@
 mod chunk;
 mod compile;
+mod compiler;
 mod finalize;
 mod layout;
 mod model;
@@ -8,8 +9,6 @@ mod string_pool;
 
 use std::collections::HashMap;
 
-use crate::compiler::Program;
-use crate::compiler::resolver::{Resolver, Variable as ResolvedVariable};
 use crate::data_win::chunk::ChunkBuilder;
 use crate::data_win::compile::{compile_code_entry, compile_object, compile_room};
 use crate::data_win::finalize::build_form;
@@ -21,6 +20,8 @@ use crate::data_win::model::{
 use crate::data_win::string_pool::StringPool;
 use crate::project::GmProject;
 use crate::types::InstanceType;
+use compiler::Program;
+use compiler::resolver::{Resolver, Variable as ResolvedVariable};
 
 pub struct DataWin {
     pub wad_version: u8,
