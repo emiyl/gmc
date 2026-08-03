@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
+use crate::project::formatter::{format_gamemaker_json, read_gamemaker_json};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TvOSOptions {
@@ -105,12 +107,14 @@ impl TvOSOptions {
     }
 
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
-        let text = fs::read_to_string(path)?;
-        Ok(serde_json::from_str(&text)?)
+        let value = read_gamemaker_json(path)?;
+        let options = serde_json::from_value(value).expect("Failed to deserialize TvOSOptions");
+        Ok(options)
     }
 
     pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), Box<dyn std::error::Error>> {
-        let json = serde_json::to_string_pretty(self)?;
+        let value = serde_json::to_value(self)?;
+        let json = format_gamemaker_json(&value);
         fs::write(path, json)?;
         Ok(())
     }

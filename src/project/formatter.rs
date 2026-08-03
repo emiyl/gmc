@@ -1,4 +1,13 @@
 use serde_json::Value;
+use std::io::Read;
+
+pub fn read_gamemaker_json<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Value> {
+    let mut file = std::fs::File::open(path)?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)?;
+    let value: Value = json5::from_str(&contents).expect("Failed to parse JSON5");
+    Ok(value)
+}
 
 pub fn format_gamemaker_json(value: &Value) -> String {
     let mut out = String::new();
