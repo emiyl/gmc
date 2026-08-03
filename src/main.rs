@@ -381,8 +381,19 @@ fn main() {
             }
         }
         Command::Clean => {
-            println!("Cleaning build output");
-            // Implement clean logic here
+            let project_path =
+                project_path.expect("Project path must be resolved for non-New commands");
+            let build_dir = project_path.parent().unwrap_or(project_path).join("build");
+
+            if build_dir.exists() {
+                if let Err(e) = fs::remove_dir_all(&build_dir) {
+                    eprintln!("Error cleaning build output: {}", e);
+                } else {
+                    println!("Build output cleaned from {}", build_dir.display());
+                }
+            } else {
+                println!("No build output to clean at {}", build_dir.display());
+            }
         }
     }
 }
