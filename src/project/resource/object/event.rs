@@ -72,14 +72,21 @@ impl Event {
         }
     }
 
-    pub fn ensure_file_exists(&self, path: &std::path::Path) -> std::io::Result<()> {
+    pub fn get_code_path_from_object_path(
+        &self,
+        object_path: &std::path::Path,
+    ) -> std::path::PathBuf {
         // path here is the path to the object file e.g. "objects/MyObject/MyObject.yy"
         // we need objects/MyObject/<EventType>_<EventSubType>.gml
-        let path = path.with_file_name(format!(
+        object_path.with_file_name(format!(
             "{}_{}.gml",
             EventType::try_from(self.event_type).unwrap_or(EventType::Create),
             self.event_num
-        ));
+        ))
+    }
+
+    pub fn ensure_code_file_exists(&self, path: &std::path::Path) -> std::io::Result<()> {
+        let path = self.get_code_path_from_object_path(path);
         if !path.exists() {
             let file = std::fs::File::create(path)?;
             file.set_len(0)?; // create an empty file

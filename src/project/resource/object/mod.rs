@@ -149,7 +149,7 @@ impl ResourceTrait for Object {
         fs::write(path, json)?;
 
         for event in &self.event_list {
-            event.ensure_file_exists(path)?;
+            event.ensure_code_file_exists(path)?;
         }
 
         Ok(())
