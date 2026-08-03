@@ -59,7 +59,7 @@ pub struct IosOptions {
     pub option_ios_podfile_path: String,
 
     pub option_ios_scale: i32,
-    pub option_ios_splashscreen_background_colour: i32,
+    pub option_ios_splashscreen_background_colour: u32,
     pub option_ios_team_id: String,
     pub option_ios_texture_page: String,
     pub option_ios_version: String,

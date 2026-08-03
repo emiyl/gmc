@@ -87,7 +87,7 @@ pub struct AndroidOptions {
     pub option_android_scale: i32,
     pub option_android_screen_depth: i32,
     pub option_android_sleep_margin: i32,
-    pub option_android_splashscreen_background_colour: i32,
+    pub option_android_splashscreen_background_colour: u32,
 
     pub option_android_splash_screens_landscape: String,
     pub option_android_splash_screens_portrait: String,
