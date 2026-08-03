@@ -1,6 +1,8 @@
 mod object;
 pub mod room;
 
+use crate::project::formatter::read_gamemaker_json;
+
 use super::ResourceId;
 pub use object::Object;
 pub use room::Room;
@@ -67,10 +69,7 @@ impl Resource {
     where
         Self: Sized,
     {
-        let mut file = fs::File::open(path)?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
-        let value: Value = json5::from_str(&contents).expect("Failed to parse JSON5");
+        let value = read_gamemaker_json(path)?;
 
         if value.get("$GMRoom").is_some() {
             let room = Room::load(value)?;
