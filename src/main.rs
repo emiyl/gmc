@@ -29,6 +29,9 @@ pub enum Command {
     /// Clean build output
     Clean,
 
+    /// Run the project
+    Run(RunArgs),
+
     /// Add resources
     Add(AddArgs),
 
@@ -37,6 +40,13 @@ pub enum Command {
 
     /// Room operations
     Room(RoomArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct RunArgs {
+    /// data.win runner binary path (default: butterscotch)
+    #[arg(short, long, value_name = "RUNNER_PATH")]
+    pub runner: Option<PathBuf>,
 }
 
 #[derive(Args, Debug)]
@@ -265,6 +275,93 @@ fn main() {
                 println!("Project created successfully!");
             }
         }
+        Command::Build => {
+            let project_path =
+                project_path.expect("Project path must be resolved for non-New commands");
+            let project = match project::GmProject::load(project_path) {
+                Ok(p) => p,
+                Err(e) => {
+                    eprintln!("Error loading project: {}", e);
+                    return;
+                }
+            };
+
+            let output = data_win::DataWin::from_project(project);
+            let output_path = project_path
+                .parent()
+                .unwrap_or(project_path)
+                .join("build")
+                .join("data.win");
+
+            if let Err(e) = output.save(&output_path) {
+                eprintln!("Error saving build output: {}", e);
+            } else {
+                println!("Build output saved to {}", output_path.display());
+            }
+        }
+        Command::Clean => {
+            let project_path =
+                project_path.expect("Project path must be resolved for non-New commands");
+            let build_dir = project_path.parent().unwrap_or(project_path).join("build");
+
+            if build_dir.exists() {
+                if let Err(e) = fs::remove_dir_all(&build_dir) {
+                    eprintln!("Error cleaning build output: {}", e);
+                } else {
+                    println!("Build output cleaned from {}", build_dir.display());
+                }
+            } else {
+                println!("No build output to clean at {}", build_dir.display());
+            }
+        }
+        Command::Run(args) => {
+            let project_path =
+                project_path.expect("Project path must be resolved for non-New commands");
+            let project = match project::GmProject::load(project_path) {
+                Ok(p) => p,
+                Err(e) => {
+                    eprintln!("Error loading project: {}", e);
+                    return;
+                }
+            };
+
+            let build_dir = project_path.parent().unwrap_or(project_path).join("build");
+            let data_win_path = build_dir.join("data.win");
+            if !build_dir.exists() || !data_win_path.exists() {
+                println!("Build output not found. Building project...");
+                let output = data_win::DataWin::from_project(project);
+                let output_path = build_dir.join("data.win");
+                if let Err(e) = output.save(&output_path) {
+                    eprintln!("Error saving build output: {}", e);
+                    return;
+                }
+            }
+
+            // Determine the runner path
+            let runner_path = if let Some(runner) = &args.runner {
+                runner.clone()
+            } else {
+                // see if binary "butterscotch" exists in PATH
+                let butterscotch_path = which::which("butterscotch");
+                match butterscotch_path {
+                    Ok(path) => path,
+                    Err(_) => {
+                        eprintln!(
+                            "butterscotch binary not found in PATH. Please install it to run the project."
+                        );
+                        return;
+                    }
+                }
+            };
+
+            let status = std::process::Command::new(runner_path)
+                .arg(data_win_path)
+                .status()
+                .expect("Failed to execute runner");
+            if !status.success() {
+                eprintln!("Runner exited with status: {}", status);
+            }
+        }
         Command::Add(args) => {
             let project_path =
                 project_path.expect("Project path must be resolved for non-New commands");
@@ -356,44 +453,5 @@ fn main() {
                 }
             }
         },
-        Command::Build => {
-            let project_path =
-                project_path.expect("Project path must be resolved for non-New commands");
-            let project = match project::GmProject::load(project_path) {
-                Ok(p) => p,
-                Err(e) => {
-                    eprintln!("Error loading project: {}", e);
-                    return;
-                }
-            };
-
-            let output = data_win::DataWin::from_project(project);
-            let output_path = project_path
-                .parent()
-                .unwrap_or(project_path)
-                .join("build")
-                .join("data.win");
-
-            if let Err(e) = output.save(&output_path) {
-                eprintln!("Error saving build output: {}", e);
-            } else {
-                println!("Build output saved to {}", output_path.display());
-            }
-        }
-        Command::Clean => {
-            let project_path =
-                project_path.expect("Project path must be resolved for non-New commands");
-            let build_dir = project_path.parent().unwrap_or(project_path).join("build");
-
-            if build_dir.exists() {
-                if let Err(e) = fs::remove_dir_all(&build_dir) {
-                    eprintln!("Error cleaning build output: {}", e);
-                } else {
-                    println!("Build output cleaned from {}", build_dir.display());
-                }
-            } else {
-                println!("No build output to clean at {}", build_dir.display());
-            }
-        }
     }
 }

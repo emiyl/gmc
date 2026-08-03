@@ -14,4 +14,11 @@ gmc room add instance Room1 Object1 0 0
 gmc build
 ```
 
+If you have the butterscotch binary in your path, you can also use the "run" command to build and run the project in one step. Alternatively you can specify the path to the butterscotch binary using the `--runner` option:
+
+```bash
+gmc run
+gmc run --runner /path/to/butterscotch
+```
+
 This will output a data.win file in the `build` directory. You can then run this data.win file using Butterscotch.
