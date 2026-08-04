@@ -9,7 +9,6 @@ use crate::project::formatter::read_gamemaker_json;
 pub use object::Object;
 pub use room::Room;
 pub use script::Script;
-pub use sprite::Sprite;
 
 use std::fs;
 
@@ -18,7 +17,6 @@ pub enum ResourceKind {
     Room,
     Object,
     Script,
-    Sprite,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -26,7 +24,6 @@ pub enum Resource {
     Room(Room),
     Object(Object),
     Script(Script),
-    Sprite(Sprite),
 }
 
 pub trait ResourceTrait {
