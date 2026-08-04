@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::io::Read;
 
 use crate::project::{
-    ResourceId,
+    ResourceId, ResourceKind,
     formatter::{format_gamemaker_json, read_gamemaker_json},
 };
 
@@ -108,7 +108,7 @@ impl GmProjectYyp {
         Ok(())
     }
 
-    pub fn add_resource(&mut self, name: String, path: String, is_room: bool) {
+    pub fn add_resource(&mut self, resource_kind: &ResourceKind, name: String, path: String) {
         let resource_id = ResourceId {
             name: name,
             path: path,
@@ -118,7 +118,7 @@ impl GmProjectYyp {
             id: resource_id.clone(),
         });
 
-        if is_room {
+        if matches!(resource_kind, ResourceKind::Room) {
             self.room_order_nodes.push(RoomOrderNode {
                 room_id: resource_id,
             });

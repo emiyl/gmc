@@ -1,11 +1,15 @@
 mod object;
 pub mod room;
-
-use crate::project::formatter::read_gamemaker_json;
+mod script;
+mod sprite;
 
 use super::ResourceId;
+use crate::project::formatter::read_gamemaker_json;
+
 pub use object::Object;
 pub use room::Room;
+pub use script::Script;
+pub use sprite::Sprite;
 
 use std::fs;
 
@@ -13,12 +17,16 @@ use std::fs;
 pub enum ResourceKind {
     Room,
     Object,
+    Script,
+    Sprite,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Resource {
     Room(Room),
     Object(Object),
+    Script(Script),
+    Sprite(Sprite),
 }
 
 pub trait ResourceTrait {
@@ -32,6 +40,7 @@ impl ResourceTrait for Resource {
         match self {
             Resource::Room(room) => room.name(),
             Resource::Object(object) => object.name(),
+            Resource::Script(script) => script.name(),
         }
     }
     fn save(&self, path: &std::path::Path) -> std::io::Result<()> {
@@ -40,12 +49,14 @@ impl ResourceTrait for Resource {
         match self {
             Resource::Room(room) => room.save(path),
             Resource::Object(object) => object.save(path),
+            Resource::Script(script) => script.save(path),
         }
     }
     fn default_path(&self) -> String {
         match self {
             Resource::Room(room) => room.default_path(),
             Resource::Object(object) => object.default_path(),
+            Resource::Script(script) => script.default_path(),
         }
     }
 }
@@ -61,6 +72,10 @@ impl Resource {
                 let object = Object::new(name, parent);
                 Resource::from_object(object)
             }
+            ResourceKind::Script => {
+                let script = Script::new(name, parent);
+                Resource::from_script(script)
+            }
         }
     }
     pub fn load(path: &std::path::Path) -> std::io::Result<Self>
@@ -75,6 +90,9 @@ impl Resource {
         } else if value.get("$GMObject").is_some() {
             let object = Object::load(value)?;
             Ok(Resource::Object(object))
+        } else if value.get("$GMScript").is_some() {
+            let script = Script::load(value)?;
+            Ok(Resource::Script(script))
         } else {
             unimplemented!("Loading for this resource type is not implemented yet")
         }
@@ -84,6 +102,7 @@ impl Resource {
         match self {
             Resource::Room(_) => ResourceKind::Room,
             Resource::Object(_) => ResourceKind::Object,
+            Resource::Script(_) => ResourceKind::Script,
         }
     }
 
@@ -117,5 +136,21 @@ impl Resource {
     }
     pub fn from_object(object: Object) -> Self {
         Resource::Object(object)
+    }
+
+    pub fn as_script(&self) -> Option<&Script> {
+        match self {
+            Resource::Script(script) => Some(script),
+            _ => None,
+        }
+    }
+    pub fn as_script_mut(&mut self) -> Option<&mut Script> {
+        match self {
+            Resource::Script(script) => Some(script),
+            _ => None,
+        }
+    }
+    pub fn from_script(script: Script) -> Self {
+        Resource::Script(script)
     }
 }

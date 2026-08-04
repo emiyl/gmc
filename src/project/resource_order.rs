@@ -1,4 +1,7 @@
-use crate::project::formatter::{format_gamemaker_json, read_gamemaker_json};
+use crate::project::{
+    ResourceKind,
+    formatter::{format_gamemaker_json, read_gamemaker_json},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -40,7 +43,11 @@ impl ResourceOrder {
         }
     }
 
-    pub fn add_resource(&mut self, name: String, path: String) {
+    pub fn add_resource(&mut self, resource_kind: &ResourceKind, name: String, path: String) {
+        if matches!(resource_kind, ResourceKind::Room) {
+            return;
+        }
+
         let last_order = self
             .resource_order_settings
             .iter()

@@ -376,6 +376,7 @@ fn main() {
             let (resource_kind, name) = match &args.resource {
                 AddResourceCommand::Room { name } => (ResourceKind::Room, name.clone()),
                 AddResourceCommand::Object { name } => (ResourceKind::Object, name.clone()),
+                AddResourceCommand::Script { name } => (ResourceKind::Script, name.clone()),
                 _ => {
                     eprintln!("Unsupported resource type for adding");
                     return;

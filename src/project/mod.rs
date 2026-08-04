@@ -173,19 +173,11 @@ impl GmProject {
         self.resources.insert(resource_name.clone(), resource);
 
         // Add the resource to the yyp file
-        self.yyp.add_resource(
-            resource_name.clone(),
-            resource_path.clone(),
-            matches!(resource_kind, ResourceKind::Room),
-        );
+        self.yyp
+            .add_resource(&resource_kind, resource_name.clone(), resource_path.clone());
 
-        match resource_kind {
-            ResourceKind::Room => {}
-            _ => {
-                self.resource_order
-                    .add_resource(resource_name.clone(), resource_path);
-            }
-        }
+        self.resource_order
+            .add_resource(&resource_kind, resource_name.clone(), resource_path);
 
         Ok(())
     }
