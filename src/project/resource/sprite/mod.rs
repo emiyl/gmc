@@ -199,13 +199,6 @@ impl Default for GMSpriteFrame {
 }
 
 impl GMSpriteFrame {
-    pub fn new(name: &str) -> Self {
-        Self {
-            base: ResourceBase::new(name, "GMSpriteFrame"),
-            ..Default::default()
-        }
-    }
-
     pub fn ensure_image_exists(
         &self,
         sprite_path: &std::path::Path,
@@ -254,10 +247,6 @@ impl Default for GMImageLayer {
 }
 
 impl GMImageLayer {
-    pub fn new() -> Self {
-        GMImageLayer::default()
-    }
-
     pub fn ensure_image_exists(
         &self,
         frame_path: &std::path::Path,
@@ -377,7 +366,7 @@ impl Default for GMSequence {
             show_backdrop: true,
             show_backdrop_image: false,
             time_units: 1,
-            tracks: vec![GMSpriteFramesTrack::default()],
+            tracks: Vec::new(),
             visible_range: Value::Null,
             volume: 1.0,
             x_origin: 0,
@@ -391,8 +380,10 @@ impl GMSequence {
         Self {
             tracks: vec![GMSpriteFramesTrack::new(SpriteFrameStore::new(
                 frames
+                    .clone()
                     .into_iter()
-                    .map(|frame_name| {
+                    .enumerate()
+                    .map(|(i, frame_name)| {
                         let mut channels = HashMap::new();
                         channels.insert(
                             "0".to_string(),
@@ -401,10 +392,11 @@ impl GMSequence {
                                 sprite_path.to_string_lossy().to_string(),
                             ),
                         );
-                        SpriteFrameKeyframe::new(channels)
+                        SpriteFrameKeyframe::new(channels, i as f32)
                     })
                     .collect(),
             ))],
+            length: frames.len() as f32,
             ..Default::default()
         }
     }
@@ -532,7 +524,7 @@ impl Default for SpriteFrameStore {
         Self {
             resource_tag: String::new(),
             resource_type: ResourceType::new("KeyframeStore<SpriteFrameKeyframe>"),
-            keyframes: vec![SpriteFrameKeyframe::default()],
+            keyframes: Vec::new(),
         }
     }
 }
@@ -579,12 +571,9 @@ impl Default for SpriteFrameKeyframe {
         Self {
             resource_tag: String::new(),
             resource_type: ResourceType::new("Keyframe<SpriteFrameKeyframe>"),
-            channels: [("0".to_string(), SpriteFrameChannel::default())]
-                .iter()
-                .cloned()
-                .collect(),
+            channels: HashMap::new(),
             disabled: false,
-            id: Uuid::new_v4().into(),
+            id: String::new(),
             is_creation_key: false,
             key: 0.0,
             length: 1.0,
@@ -594,9 +583,10 @@ impl Default for SpriteFrameKeyframe {
 }
 
 impl SpriteFrameKeyframe {
-    pub fn new(channels: HashMap<String, SpriteFrameChannel>) -> Self {
+    pub fn new(channels: HashMap<String, SpriteFrameChannel>, key: f32) -> Self {
         Self {
             channels,
+            key,
             ..Default::default()
         }
     }
