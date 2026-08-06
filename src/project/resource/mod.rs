@@ -81,7 +81,11 @@ impl Resource {
                 Resource::from_script(script)
             }
             ResourceKind::Sprite => {
-                let sprite = GMSprite::new(name, parent);
+                let sprite = GMSprite::new(
+                    name,
+                    parent,
+                    &std::path::Path::new(&format!("sprites/{}/{}.yy", name, name)),
+                );
                 Resource::Sprite(sprite)
             }
         }

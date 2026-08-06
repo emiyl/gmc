@@ -87,6 +87,8 @@ pub struct GMSprite {
 
 impl Default for GMSprite {
     fn default() -> Self {
+        let frame = GMSpriteFrame::default();
+
         Self {
             base: ResourceBase::new("Sprite1", "GMSprite"),
             resource_tag: "v2".into(),
@@ -101,7 +103,7 @@ impl Default for GMSprite {
             dynamic_texture_page: false,
             edge_filtering: false,
             for_3d: false,
-            frames: vec![GMSpriteFrame::default()],
+            frames: vec![frame.clone()],
             grid_x: 0,
             grid_y: 0,
             height: 64,
@@ -110,7 +112,10 @@ impl Default for GMSprite {
             nine_slice: Value::Null,
             origin: 0,
             pre_multiply_alpha: false,
-            sequence: GMSequence::default(),
+            sequence: GMSequence::new(
+                vec![frame.base.name],
+                &std::path::Path::new("sprites/Sprite1/Sprite1.yy"),
+            ),
             swatch_colours: Value::Null,
             swf_precision: 0.5,
             texture_group_id: ResourceId {
@@ -157,9 +162,13 @@ impl ResourceTrait for GMSprite {
 }
 
 impl GMSprite {
-    pub fn new(name: &str, parent: ResourceId) -> Self {
+    pub fn new(name: &str, parent: ResourceId, path: &std::path::Path) -> Self {
+        let frame = GMSpriteFrame::default();
+
         Self {
             base: ResourceBase::new(name, "GMSprite"),
+            frames: vec![frame.clone()],
+            sequence: GMSequence::new(vec![frame.base.name], &path),
             parent,
             ..Default::default()
         }
@@ -190,6 +199,13 @@ impl Default for GMSpriteFrame {
 }
 
 impl GMSpriteFrame {
+    pub fn new(name: &str) -> Self {
+        Self {
+            base: ResourceBase::new(name, "GMSpriteFrame"),
+            ..Default::default()
+        }
+    }
+
     pub fn ensure_image_exists(
         &self,
         sprite_path: &std::path::Path,
@@ -370,6 +386,30 @@ impl Default for GMSequence {
     }
 }
 
+impl GMSequence {
+    pub fn new(frames: Vec<String>, sprite_path: &std::path::Path) -> Self {
+        Self {
+            tracks: vec![GMSpriteFramesTrack::new(SpriteFrameStore::new(
+                frames
+                    .into_iter()
+                    .map(|frame_name| {
+                        let mut channels = HashMap::new();
+                        channels.insert(
+                            "0".to_string(),
+                            SpriteFrameChannel::new(
+                                frame_name.clone(),
+                                sprite_path.to_string_lossy().to_string(),
+                            ),
+                        );
+                        SpriteFrameKeyframe::new(channels)
+                    })
+                    .collect(),
+            ))],
+            ..Default::default()
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MessageEventStore {
     #[serde(rename = "$KeyframeStore<MessageEventKeyframe>")]
@@ -467,6 +507,15 @@ impl Default for GMSpriteFramesTrack {
     }
 }
 
+impl GMSpriteFramesTrack {
+    pub fn new(keyframes: SpriteFrameStore) -> Self {
+        Self {
+            keyframes,
+            ..Default::default()
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SpriteFrameStore {
     #[serde(rename = "$KeyframeStore<SpriteFrameKeyframe>")]
@@ -484,6 +533,15 @@ impl Default for SpriteFrameStore {
             resource_tag: String::new(),
             resource_type: ResourceType::new("KeyframeStore<SpriteFrameKeyframe>"),
             keyframes: vec![SpriteFrameKeyframe::default()],
+        }
+    }
+}
+
+impl SpriteFrameStore {
+    pub fn new(keyframes: Vec<SpriteFrameKeyframe>) -> Self {
+        Self {
+            keyframes,
+            ..Default::default()
         }
     }
 }
@@ -535,6 +593,15 @@ impl Default for SpriteFrameKeyframe {
     }
 }
 
+impl SpriteFrameKeyframe {
+    pub fn new(channels: HashMap<String, SpriteFrameChannel>) -> Self {
+        Self {
+            channels,
+            ..Default::default()
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SpriteFrameChannel {
     #[serde(rename = "$SpriteFrameKeyframe")]
@@ -559,6 +626,19 @@ impl Default for SpriteFrameChannel {
             resource_tag: String::new(),
             resource_type: ResourceType::new("SpriteFrameKeyframe"),
             id: resource_id,
+        }
+    }
+}
+
+impl SpriteFrameChannel {
+    pub fn new(name: String, path: String) -> Self {
+        let id = ResourceId {
+            name: name,
+            path: path,
+        };
+        Self {
+            id,
+            ..Default::default()
         }
     }
 }
