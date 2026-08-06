@@ -8,28 +8,28 @@ use std::fs;
 use super::{ResourceId, ResourceTrait};
 use crate::project::{
     formatter::format_gamemaker_json,
-    resource::object::event::{EventSubType, EventType},
+    resource::{
+        ResourceBase,
+        object::event::{EventSubType, EventType},
+    },
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
-pub struct Object {
+pub struct GMObject {
     #[serde(rename = "$GMObject")]
-    pub gm_object: String,
-
-    #[serde(rename = "%Name")]
-    pub display_name_internal: String,
+    pub resource_tag: String,
+    #[serde(flatten)]
+    pub base: ResourceBase,
+    pub parent: ResourceId,
 
     #[serde(rename = "eventList")]
     pub event_list: Vec<Event>,
 
     pub managed: bool,
-    pub name: String,
 
     #[serde(rename = "overriddenProperties")]
     pub overridden_properties: Vec<serde_json::Value>,
-
-    pub parent: ResourceId,
 
     #[serde(rename = "parentObjectId")]
     pub parent_object_id: Option<ResourceId>,
@@ -74,12 +74,6 @@ pub struct Object {
 
     pub properties: Vec<serde_json::Value>,
 
-    #[serde(rename = "resourceType")]
-    pub resource_type: String,
-
-    #[serde(rename = "resourceVersion")]
-    pub resource_version: String,
-
     pub solid: bool,
 
     #[serde(rename = "spriteId")]
@@ -91,23 +85,18 @@ pub struct Object {
     pub visible: bool,
 }
 
-impl Default for Object {
+impl Default for GMObject {
     fn default() -> Self {
         Self {
-            gm_object: "".into(),
-            display_name_internal: "Object1".into(),
+            resource_tag: "".into(),
+            base: ResourceBase::new("Object1", "GMObject"),
+            parent: ResourceId::default(),
 
             event_list: vec![],
 
             managed: true,
-            name: "Object1".into(),
 
             overridden_properties: Vec::new(),
-
-            parent: ResourceId {
-                name: "BLANK GAME".into(),
-                path: "BLANK GAME.yyp".into(),
-            },
 
             parent_object_id: None,
 
@@ -128,9 +117,6 @@ impl Default for Object {
 
             properties: Vec::new(),
 
-            resource_type: "GMObject".into(),
-            resource_version: "2.0".into(),
-
             solid: false,
 
             sprite_id: None,
@@ -141,13 +127,13 @@ impl Default for Object {
     }
 }
 
-impl ResourceTrait for Object {
+impl ResourceTrait for GMObject {
     fn name(&self) -> &str {
-        &self.name
+        &self.base.name
     }
 
     fn save(&self, path: &std::path::Path) -> std::io::Result<()> {
-        let value = serde_json::to_value(self).expect("Failed to serialize Object");
+        let value = serde_json::to_value(self).expect("Failed to serialize GMObject");
         let json = format_gamemaker_json(&value);
         fs::write(path, json)?;
 
@@ -159,22 +145,22 @@ impl ResourceTrait for Object {
     }
 
     fn default_path(&self) -> String {
-        format!("objects/{}/{}.yy", self.name, self.name)
+        format!("objects/{}/{}.yy", self.base.name, self.base.name)
     }
 }
 
-impl Object {
+impl GMObject {
     pub fn new(name: &str, parent: ResourceId) -> Self {
         Self {
-            display_name_internal: name.to_string(),
-            name: name.to_string(),
+            base: ResourceBase::new(name, "GMObject"),
             parent,
             ..Default::default()
         }
     }
 
     pub fn load(value: Value) -> std::io::Result<Self> {
-        let object: Object = serde_json::from_value(value).expect("Failed to deserialize Object");
+        let object: GMObject =
+            serde_json::from_value(value).expect("Failed to deserialize GMObject");
         Ok(object)
     }
 

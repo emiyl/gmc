@@ -377,6 +377,7 @@ fn main() {
                 AddResourceCommand::Room { name } => (ResourceKind::Room, name.clone()),
                 AddResourceCommand::Object { name } => (ResourceKind::Object, name.clone()),
                 AddResourceCommand::Script { name } => (ResourceKind::Script, name.clone()),
+                AddResourceCommand::Sprite { name } => (ResourceKind::Sprite, name.clone()),
                 _ => {
                     eprintln!("Unsupported resource type for adding");
                     return;
@@ -387,12 +388,13 @@ fn main() {
                 project
                     .add_resource(&name, resource_kind)
                     .expect("Failed to add resource");
-            }
-
-            if let Err(e) = project.save() {
-                eprintln!("Error saving project: {}", e);
+                if let Err(e) = project.save() {
+                    eprintln!("Error saving project: {}", e);
+                } else {
+                    println!("Resource added successfully");
+                }
             } else {
-                println!("Resource added successfully");
+                println!("Error: Resource {} already exists.", name);
             }
         }
         Command::Object(args) => match &args.command {

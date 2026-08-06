@@ -8,17 +8,17 @@ use serde_json::Value;
 use std::fs;
 
 use super::{ResourceId, ResourceTrait};
-use crate::project::formatter::format_gamemaker_json;
-use instance::Instance;
-use layer::{BackgroundLayer, InstanceLayer, Layer};
+use crate::project::{formatter::format_gamemaker_json, resource::ResourceBase};
+use instance::GMRInstance;
+use layer::{GMRBackgroundLayer, GMRInstanceLayer, Layer};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Room {
+pub struct GMRoom {
     #[serde(rename = "$GMRoom")]
-    pub gm_room: String,
-
-    #[serde(rename = "%Name")]
-    pub percent_name: String,
+    pub resource_tag: String,
+    #[serde(flatten)]
+    pub base: ResourceBase,
+    pub parent: ResourceId,
 
     #[serde(rename = "creationCodeFile")]
     pub creation_code_file: String,
@@ -40,21 +40,11 @@ pub struct Room {
 
     pub layers: Vec<Layer>,
 
-    pub name: String,
-
-    pub parent: ResourceId,
-
     #[serde(rename = "parentRoom")]
     pub parent_room: Option<Value>,
 
     #[serde(rename = "physicsSettings")]
     pub physics_settings: PhysicsSettings,
-
-    #[serde(rename = "resourceType")]
-    pub resource_type: String,
-
-    #[serde(rename = "resourceVersion")]
-    pub resource_version: String,
 
     #[serde(rename = "roomSettings")]
     pub room_settings: RoomSettings,
@@ -70,30 +60,21 @@ pub struct Room {
     pub volume: f64,
 }
 
-impl Default for Room {
+impl Default for GMRoom {
     fn default() -> Self {
-        Room {
-            gm_room: "v1".to_string(),
-            percent_name: "Room1".to_string(),
+        GMRoom {
+            base: ResourceBase::new("Room1", "GMRoom"),
+            resource_tag: "v1".to_string(),
+            parent: ResourceId::default(),
             creation_code_file: String::new(),
             inherit_code: false,
             inherit_creation_order: false,
             inherit_layers: false,
             instance_creation_order: Vec::new(),
             is_dnd: false,
-            layers: vec![
-                Layer::instance_layer("Instances", 0),
-                Layer::background_layer("Background", 100),
-            ],
-            name: "Room1".to_string(),
-            parent: ResourceId {
-                name: "BLANK GAME".to_string(),
-                path: "BLANK GAME.yyp".to_string(),
-            },
+            layers: vec![Layer::instance_layer(0), Layer::background_layer(100)],
             parent_room: None,
             physics_settings: PhysicsSettings::default(),
-            resource_type: "GMRoom".to_string(),
-            resource_version: "2.0".to_string(),
             room_settings: RoomSettings::default(),
             sequence_id: None,
             views: (0..8).map(|_| View::default()).collect(),
@@ -103,9 +84,9 @@ impl Default for Room {
     }
 }
 
-impl ResourceTrait for Room {
+impl ResourceTrait for GMRoom {
     fn name(&self) -> &str {
-        &self.name
+        &self.base.name
     }
 
     fn save(&self, path: &std::path::Path) -> std::io::Result<()> {
@@ -116,27 +97,26 @@ impl ResourceTrait for Room {
     }
 
     fn default_path(&self) -> String {
-        format!("rooms/{}/{}.yy", self.name, self.name)
+        format!("rooms/{}/{}.yy", self.base.name, self.base.name)
     }
 }
 
-impl Room {
+impl GMRoom {
     pub fn new(name: &str, parent: ResourceId) -> Self {
-        Room {
-            name: name.to_string(),
-            percent_name: name.to_string(),
+        GMRoom {
+            base: ResourceBase::new(name, "GMRoom"),
             parent,
-            ..Room::default()
+            ..GMRoom::default()
         }
     }
 
     pub fn load(value: Value) -> std::io::Result<Self> {
-        let room: Room = serde_json::from_value(value).expect("Failed to deserialize Room");
+        let room: GMRoom = serde_json::from_value(value).expect("Failed to deserialize GMRoom");
         Ok(room)
     }
 
-    pub fn add_instance_layer(&mut self, layer_name: &str) -> &mut InstanceLayer {
-        let new_layer = Layer::instance_layer(layer_name, self.layers.len() as i32);
+    pub fn add_instance_layer(&mut self) -> &mut GMRInstanceLayer {
+        let new_layer = Layer::instance_layer(self.layers.len() as i32);
         self.layers.push(new_layer);
         if let Layer::Instance(layer) = self.layers.last_mut().unwrap() {
             layer
@@ -145,8 +125,8 @@ impl Room {
         }
     }
 
-    pub fn add_background_layer(&mut self, layer_name: &str) -> &mut BackgroundLayer {
-        let new_layer = Layer::background_layer(layer_name, self.layers.len() as i32);
+    pub fn add_background_layer(&mut self) -> &mut GMRBackgroundLayer {
+        let new_layer = Layer::background_layer(self.layers.len() as i32);
         self.layers.push(new_layer);
         if let Layer::Background(layer) = self.layers.last_mut().unwrap() {
             layer
@@ -156,10 +136,10 @@ impl Room {
     }
 
     pub fn add_instance(&mut self, room_id: ResourceId, object_id: ResourceId, x: f32, y: f32) {
-        let instance = Instance::new(object_id, x, y);
+        let instance = GMRInstance::new(object_id, x, y);
 
         let resource_id = ResourceId {
-            name: instance.name.clone(),
+            name: instance.base.name.clone(),
             path: room_id.path.clone(),
         };
 
@@ -170,7 +150,7 @@ impl Room {
         {
             layer.instances.push(instance);
         } else {
-            let layer = self.add_instance_layer("Instances");
+            let layer = self.add_instance_layer();
             layer.instances.push(instance);
         }
 

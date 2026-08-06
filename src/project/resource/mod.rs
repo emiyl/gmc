@@ -6,10 +6,12 @@ mod sprite;
 use super::ResourceId;
 use crate::project::formatter::read_gamemaker_json;
 
-pub use object::Object;
-pub use room::Room;
-pub use script::Script;
+pub use object::GMObject;
+pub use room::GMRoom;
+pub use script::GMScript;
+pub use sprite::GMSprite;
 
+use serde::{Deserialize, Serialize};
 use std::fs;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -17,13 +19,15 @@ pub enum ResourceKind {
     Room,
     Object,
     Script,
+    Sprite,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Resource {
-    Room(Room),
-    Object(Object),
-    Script(Script),
+    Room(GMRoom),
+    Object(GMObject),
+    Script(GMScript),
+    Sprite(GMSprite),
 }
 
 pub trait ResourceTrait {
@@ -38,6 +42,7 @@ impl ResourceTrait for Resource {
             Resource::Room(room) => room.name(),
             Resource::Object(object) => object.name(),
             Resource::Script(script) => script.name(),
+            Resource::Sprite(sprite) => sprite.name(),
         }
     }
     fn save(&self, path: &std::path::Path) -> std::io::Result<()> {
@@ -47,6 +52,7 @@ impl ResourceTrait for Resource {
             Resource::Room(room) => room.save(path),
             Resource::Object(object) => object.save(path),
             Resource::Script(script) => script.save(path),
+            Resource::Sprite(sprite) => sprite.save(path),
         }
     }
     fn default_path(&self) -> String {
@@ -54,6 +60,7 @@ impl ResourceTrait for Resource {
             Resource::Room(room) => room.default_path(),
             Resource::Object(object) => object.default_path(),
             Resource::Script(script) => script.default_path(),
+            Resource::Sprite(sprite) => sprite.default_path(),
         }
     }
 }
@@ -62,16 +69,20 @@ impl Resource {
     pub fn new(name: &str, kind: ResourceKind, parent: ResourceId) -> Self {
         match kind {
             ResourceKind::Room => {
-                let room = Room::new(name, parent);
+                let room = GMRoom::new(name, parent);
                 Resource::from_room(room)
             }
             ResourceKind::Object => {
-                let object = Object::new(name, parent);
+                let object = GMObject::new(name, parent);
                 Resource::from_object(object)
             }
             ResourceKind::Script => {
-                let script = Script::new(name, parent);
+                let script = GMScript::new(name, parent);
                 Resource::from_script(script)
+            }
+            ResourceKind::Sprite => {
+                let sprite = GMSprite::new(name, parent);
+                Resource::Sprite(sprite)
             }
         }
     }
@@ -81,17 +92,26 @@ impl Resource {
     {
         let value = read_gamemaker_json(path)?;
 
-        if value.get("$GMRoom").is_some() {
-            let room = Room::load(value)?;
-            Ok(Resource::Room(room))
-        } else if value.get("$GMObject").is_some() {
-            let object = Object::load(value)?;
-            Ok(Resource::Object(object))
-        } else if value.get("$GMScript").is_some() {
-            let script = Script::load(value)?;
-            Ok(Resource::Script(script))
-        } else {
-            unimplemented!("Loading for this resource type is not implemented yet")
+        match value.get("resourceType").and_then(|v| v.as_str()) {
+            Some("GMRoom") => {
+                let room = GMRoom::load(value)?;
+                Ok(Resource::Room(room))
+            }
+            Some("GMObject") => {
+                let object = GMObject::load(value)?;
+                Ok(Resource::Object(object))
+            }
+            Some("GMScript") => {
+                let script = GMScript::load(value)?;
+                Ok(Resource::Script(script))
+            }
+            Some("GMSprite") => {
+                let sprite = GMSprite::load(value)?;
+                Ok(Resource::Sprite(sprite))
+            }
+            _ => {
+                unimplemented!("Loading for this resource type is not implemented yet")
+            }
         }
     }
 
@@ -100,54 +120,129 @@ impl Resource {
             Resource::Room(_) => ResourceKind::Room,
             Resource::Object(_) => ResourceKind::Object,
             Resource::Script(_) => ResourceKind::Script,
+            Resource::Sprite(_) => ResourceKind::Sprite,
         }
     }
 
-    pub fn as_room(&self) -> Option<&Room> {
+    pub fn as_room(&self) -> Option<&GMRoom> {
         match self {
             Resource::Room(room) => Some(room),
             _ => None,
         }
     }
-    pub fn as_room_mut(&mut self) -> Option<&mut Room> {
+    pub fn as_room_mut(&mut self) -> Option<&mut GMRoom> {
         match self {
             Resource::Room(room) => Some(room),
             _ => None,
         }
     }
-    pub fn from_room(room: Room) -> Self {
+    pub fn from_room(room: GMRoom) -> Self {
         Resource::Room(room)
     }
 
-    pub fn as_object(&self) -> Option<&Object> {
+    pub fn as_object(&self) -> Option<&GMObject> {
         match self {
             Resource::Object(object) => Some(object),
             _ => None,
         }
     }
-    pub fn as_object_mut(&mut self) -> Option<&mut Object> {
+    pub fn as_object_mut(&mut self) -> Option<&mut GMObject> {
         match self {
             Resource::Object(object) => Some(object),
             _ => None,
         }
     }
-    pub fn from_object(object: Object) -> Self {
+    pub fn from_object(object: GMObject) -> Self {
         Resource::Object(object)
     }
 
-    pub fn as_script(&self) -> Option<&Script> {
+    pub fn as_script(&self) -> Option<&GMScript> {
         match self {
             Resource::Script(script) => Some(script),
             _ => None,
         }
     }
-    pub fn as_script_mut(&mut self) -> Option<&mut Script> {
+    pub fn as_script_mut(&mut self) -> Option<&mut GMScript> {
         match self {
             Resource::Script(script) => Some(script),
             _ => None,
         }
     }
-    pub fn from_script(script: Script) -> Self {
+    pub fn from_script(script: GMScript) -> Self {
         Resource::Script(script)
+    }
+
+    pub fn as_sprite(&self) -> Option<&GMSprite> {
+        match self {
+            Resource::Sprite(sprite) => Some(sprite),
+            _ => None,
+        }
+    }
+    pub fn as_sprite_mut(&mut self) -> Option<&mut GMSprite> {
+        match self {
+            Resource::Sprite(sprite) => Some(sprite),
+            _ => None,
+        }
+    }
+    pub fn from_sprite(sprite: GMSprite) -> Self {
+        Resource::Sprite(sprite)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ResourceType {
+    #[serde(rename = "resourceType")]
+    pub resource_type: String,
+
+    #[serde(rename = "resourceVersion")]
+    pub resource_version: String,
+}
+
+impl Default for ResourceType {
+    fn default() -> Self {
+        Self {
+            resource_type: "Resource".to_string(),
+            resource_version: "2.0".to_string(),
+        }
+    }
+}
+
+impl ResourceType {
+    fn new(resource_type: &str) -> Self {
+        Self {
+            resource_type: resource_type.to_string(),
+            resource_version: "2.0".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ResourceBase {
+    #[serde(rename = "%Name")]
+    pub display_name: String,
+
+    pub name: String,
+
+    #[serde(flatten)]
+    pub resource_type: ResourceType,
+}
+
+impl Default for ResourceBase {
+    fn default() -> Self {
+        Self {
+            display_name: "Resource1".to_string(),
+            name: "Resource1".to_string(),
+            resource_type: ResourceType::default(),
+        }
+    }
+}
+
+impl ResourceBase {
+    fn new(name: &str, resource_type: &str) -> Self {
+        Self {
+            display_name: name.to_string(),
+            name: name.to_string(),
+            resource_type: ResourceType::new(resource_type),
+        }
     }
 }

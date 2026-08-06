@@ -3,47 +3,38 @@ use std::fs;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::project::{ResourceId, ResourceTrait, formatter::format_gamemaker_json};
+use crate::project::{
+    ResourceId, ResourceTrait, formatter::format_gamemaker_json, resource::ResourceBase,
+};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Script {
+pub struct GMScript {
     #[serde(rename = "$GMScript")]
-    gm_script: String,
-    #[serde(rename = "%Name")]
-    display_name_internal: String,
+    resource_tag: String,
+    #[serde(flatten)]
+    pub base: ResourceBase,
+    parent: ResourceId,
     #[serde(rename = "isCompatibility")]
     is_compatibility: bool,
     #[serde(rename = "isDnd")]
     is_dnd: bool,
-    name: String,
-    parent: ResourceId,
-    #[serde(rename = "resourceType")]
-    resource_type: String,
-    #[serde(rename = "resourceVersion")]
-    resource_version: String,
 }
 
-impl Default for Script {
+impl Default for GMScript {
     fn default() -> Self {
         Self {
-            gm_script: "v1".into(),
-            display_name_internal: "Script1".into(),
+            resource_tag: "v1".into(),
+            base: ResourceBase::new("Script1", "GMScript"),
             is_compatibility: false,
             is_dnd: false,
-            name: "Script1".into(),
-            parent: ResourceId {
-                name: "".into(),
-                path: "".into(),
-            },
-            resource_type: "GMScript".into(),
-            resource_version: "2.0".into(),
+            parent: ResourceId::default(),
         }
     }
 }
 
-impl ResourceTrait for Script {
+impl ResourceTrait for GMScript {
     fn name(&self) -> &str {
-        &self.name
+        &self.base.name
     }
 
     fn save(&self, path: &std::path::Path) -> std::io::Result<()> {
@@ -57,15 +48,14 @@ impl ResourceTrait for Script {
     }
 
     fn default_path(&self) -> String {
-        format!("scripts/{}/{}.yy", self.name, self.name)
+        format!("scripts/{}/{}.yy", self.base.name, self.base.name)
     }
 }
 
-impl Script {
+impl GMScript {
     pub fn new(name: &str, parent: ResourceId) -> Self {
         Self {
-            display_name_internal: name.into(),
-            name: name.into(),
+            base: ResourceBase::new(name, "GMScript"),
             parent,
             ..Default::default()
         }
@@ -82,7 +72,7 @@ impl Script {
     ) -> std::path::PathBuf {
         // script_path is path to the script resource, e.g. "scripts/Script1/Script1.yy"
         // we need scripts/Script1/Script1.gml
-        script_path.with_file_name(format!("{}.gml", self.name))
+        script_path.with_file_name(format!("{}.gml", self.base.name))
     }
 
     pub fn ensure_code_file_exists(&self, path: &std::path::Path) -> std::io::Result<()> {
@@ -90,7 +80,7 @@ impl Script {
         if !path.exists() {
             let mut file = fs::File::create(path)?;
             use std::io::Write;
-            writeln!(file, "function {}(){{\n\n}}", self.name)?;
+            writeln!(file, "function {}(){{\n\n}}", self.base.name)?;
         }
         Ok(())
     }

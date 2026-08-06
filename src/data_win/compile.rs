@@ -13,7 +13,7 @@ use crate::data_win::model::{
     CompiledCodeEntry, CompiledCodeOwner, CompiledEvent, CompiledInstance, CompiledObject,
     CompiledRoom, PhysicsVertex,
 };
-use crate::project::resource::{Object, Room};
+use crate::project::resource::{GMObject, GMRoom};
 
 fn collect_function_declarations(
     statements: &[Statement],
@@ -147,7 +147,7 @@ fn compile_struct_constructor_entries(
     entries
 }
 
-pub fn compile_room(room: &Room, object_id_by_name: &HashMap<String, u32>) -> CompiledRoom {
+pub fn compile_room(room: &GMRoom, object_id_by_name: &HashMap<String, u32>) -> CompiledRoom {
     use crate::project::resource::room::LayerTrait;
 
     let instances = room
@@ -173,7 +173,7 @@ pub fn compile_room(room: &Room, object_id_by_name: &HashMap<String, u32>) -> Co
         .collect::<Vec<_>>();
 
     CompiledRoom {
-        name: room.name.clone(),
+        name: room.base.name.clone(),
         width: room.room_settings.width,
         height: room.room_settings.height,
         creation_code_id: -1,
@@ -188,7 +188,7 @@ pub fn compile_room(room: &Room, object_id_by_name: &HashMap<String, u32>) -> Co
 }
 
 pub fn compile_object(
-    object: &Object,
+    object: &GMObject,
     object_path: &Path,
     object_id_by_name: &HashMap<String, u32>,
     resolver: &mut Resolver,
@@ -196,12 +196,18 @@ pub fn compile_object(
     code_entries: &mut Vec<CompiledCodeEntry>,
 ) -> CompiledObject {
     for event in &object.event_list {
-        let key = (object.name.clone(), event.event_type, event.event_num);
+        let key = (object.base.name.clone(), event.event_type, event.event_num);
 
         let code = event.get_code(object_path).unwrap_or_default();
-        let entry_name = format!("{}_{}_{}", object.name, event.event_type, event.event_num);
+        let entry_name = format!(
+            "{}_{}_{}",
+            object.base.name, event.event_type, event.event_num
+        );
         let owner = CompiledCodeOwner::ObjectEvent {
-            object_id: object_id_by_name.get(&object.name).copied().unwrap_or(0),
+            object_id: object_id_by_name
+                .get(&object.base.name)
+                .copied()
+                .unwrap_or(0),
             event_type: event.event_type,
             event_num: event.event_num,
         };
@@ -214,7 +220,7 @@ pub fn compile_object(
 
     let mut event_lists: [Vec<CompiledEvent>; 15] = Default::default();
     for event in &object.event_list {
-        let key = (object.name.clone(), event.event_type, event.event_num);
+        let key = (object.base.name.clone(), event.event_type, event.event_num);
         let code_index = code_lookup
             .get(&key)
             .copied()
@@ -255,7 +261,7 @@ pub fn compile_object(
         .collect::<Vec<_>>();
 
     CompiledObject {
-        name: object.name.clone(),
+        name: object.base.name.clone(),
         sprite: -1,
         parent: object
             .parent_object_id

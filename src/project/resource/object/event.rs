@@ -1,4 +1,4 @@
-use crate::project::ResourceId;
+use crate::project::{ResourceId, resource::ResourceBase};
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{Deserialize, Serialize};
@@ -9,10 +9,9 @@ use strum_macros::{Display, EnumString};
 #[serde(default)]
 pub struct Event {
     #[serde(rename = "$GMEvent")]
-    pub gm_event: String,
-
-    #[serde(rename = "%Name")]
-    pub display_name_internal: String,
+    pub resource_tag: String,
+    #[serde(flatten)]
+    pub base: ResourceBase,
 
     #[serde(rename = "collisionObjectId")]
     pub collision_object_id: Option<ResourceId>,
@@ -25,28 +24,17 @@ pub struct Event {
 
     #[serde(rename = "isDnD")]
     pub is_dnd: bool,
-
-    pub name: String,
-
-    #[serde(rename = "resourceType")]
-    pub resource_type: String,
-
-    #[serde(rename = "resourceVersion")]
-    pub resource_version: String,
 }
 
 impl Default for Event {
     fn default() -> Self {
         Self {
-            gm_event: "v1".into(),
-            display_name_internal: "".into(),
+            resource_tag: "v1".into(),
+            base: ResourceBase::default(),
             collision_object_id: None,
             event_num: (&EventSubType::None).value(),
             event_type: EventType::Create as i32,
             is_dnd: false,
-            name: "".into(),
-            resource_type: "GMEvent".into(),
-            resource_version: "2.0".into(),
         }
     }
 }

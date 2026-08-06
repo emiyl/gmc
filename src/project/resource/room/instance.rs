@@ -2,18 +2,18 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::project::resource::ResourceBase;
+
 use super::ResourceId;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct Instance {
+pub struct GMRInstance {
     #[serde(rename = "$GMRInstance")]
     pub resource_tag: String,
 
-    #[serde(rename = "%Name")]
-    pub display_name: String,
-
-    pub name: String,
+    #[serde(flatten)]
+    pub base: ResourceBase,
 
     pub colour: u32,
 
@@ -47,12 +47,6 @@ pub struct Instance {
 
     pub properties: Vec<Value>,
 
-    #[serde(rename = "resourceType")]
-    pub resource_type: String,
-
-    #[serde(rename = "resourceVersion")]
-    pub resource_version: String,
-
     pub rotation: f32,
 
     #[serde(rename = "scaleX")]
@@ -65,14 +59,12 @@ pub struct Instance {
     pub y: f32,
 }
 
-impl Default for Instance {
+impl Default for GMRInstance {
     fn default() -> Self {
         let name = Self::new_instance_name();
         Self {
             resource_tag: "v4".to_string(),
-
-            display_name: name.clone(),
-            name: name.clone(),
+            base: ResourceBase::new(&name, "GMRInstance"),
 
             colour: 0xFFFFFFFF,
             frozen: false,
@@ -92,9 +84,6 @@ impl Default for Instance {
 
             properties: Vec::new(),
 
-            resource_type: "GMRInstance".into(),
-            resource_version: "2.0".into(),
-
             rotation: 0.0,
 
             scale_x: 1.0,
@@ -106,7 +95,7 @@ impl Default for Instance {
     }
 }
 
-impl Instance {
+impl GMRInstance {
     fn new_instance_name() -> String {
         // Generate a random 8-digit hexadecimal string to use as a unique instance name.
         let value: u32 = rand::rng().random();

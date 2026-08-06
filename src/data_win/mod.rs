@@ -135,7 +135,7 @@ impl DataWin {
                     );
                     data_win.objects.push(compiled_object);
                 }
-                Resource::Script(script) => {}
+                _ => {}
             }
         }
 

@@ -1,13 +1,16 @@
-use super::instance::Instance;
+use crate::project::resource::ResourceBase;
+
+use super::instance::GMRInstance;
 
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct InstanceLayer {
-    #[serde(rename = "%Name")]
-    pub display_name: String,
+pub struct GMRInstanceLayer {
+    // resource_tag is taken care of by serialize and deserialize implementations for Layer
+    #[serde(flatten)]
+    pub base: ResourceBase,
 
     pub depth: i32,
 
@@ -35,26 +38,21 @@ pub struct InstanceLayer {
     #[serde(rename = "inheritVisibility")]
     pub inherit_visibility: bool,
 
-    pub instances: Vec<Instance>,
+    pub instances: Vec<GMRInstance>,
     pub layers: Vec<Layer>,
 
-    pub name: String,
     pub properties: Vec<Value>,
-
-    #[serde(rename = "resourceType")]
-    pub resource_type: String,
-    #[serde(rename = "resourceVersion")]
-    pub resource_version: String,
 
     #[serde(rename = "userdefinedDepth")]
     pub user_defined_depth: bool,
     pub visible: bool,
 }
 
-impl Default for InstanceLayer {
+impl Default for GMRInstanceLayer {
     fn default() -> Self {
         Self {
-            display_name: String::new(),
+            base: ResourceBase::new("Instances", "GMRInstanceLayer"),
+
             depth: 0,
             effect_enabled: true,
             effect_type: Value::Null,
@@ -71,34 +69,27 @@ impl Default for InstanceLayer {
             instances: Vec::new(),
             layers: Vec::new(),
 
-            name: String::new(),
             properties: Vec::new(),
 
-            resource_type: "GMRInstanceLayer".to_string(),
-            resource_version: "2.0".to_string(),
             user_defined_depth: false,
             visible: true,
         }
     }
 }
 
-impl InstanceLayer {
-    pub fn new(name: impl Into<String>, depth: i32) -> Self {
-        let name = name.into();
-
+impl GMRInstanceLayer {
+    pub fn new(depth: i32) -> Self {
         Self {
-            display_name: name.clone(),
-            name,
             depth,
             ..Default::default()
         }
     }
 
-    pub fn add_instance(&mut self, instance: Instance) {
+    pub fn add_instance(&mut self, instance: GMRInstance) {
         self.instances.push(instance);
     }
 
-    pub fn with_instance(mut self, instance: Instance) -> Self {
+    pub fn with_instance(mut self, instance: GMRInstance) -> Self {
         self.add_instance(instance);
         self
     }
@@ -106,9 +97,9 @@ impl InstanceLayer {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct BackgroundLayer {
-    #[serde(rename = "%Name")]
-    pub display_name: String,
+pub struct GMRBackgroundLayer {
+    #[serde(flatten)]
+    pub base: ResourceBase,
 
     #[serde(rename = "animationFPS")]
     pub animation_fps: f64,
@@ -147,14 +138,8 @@ pub struct BackgroundLayer {
     #[serde(rename = "inheritVisibility")]
     pub inherit_visibility: bool,
 
-    pub name: String,
     pub layers: Vec<Layer>,
     pub properties: Vec<Value>,
-
-    #[serde(rename = "resourceType")]
-    pub resource_type: String,
-    #[serde(rename = "resourceVersion")]
-    pub resource_version: String,
 
     #[serde(rename = "spriteId")]
     pub sprite_id: Value,
@@ -174,10 +159,10 @@ pub struct BackgroundLayer {
     pub y: i32,
 }
 
-impl Default for BackgroundLayer {
+impl Default for GMRBackgroundLayer {
     fn default() -> Self {
         Self {
-            display_name: String::new(),
+            base: ResourceBase::new("Background", "GMRBackgroundLayer"),
 
             animation_fps: 15.0,
             animation_speed_type: 0,
@@ -201,11 +186,7 @@ impl Default for BackgroundLayer {
             inherit_visibility: true,
 
             layers: Vec::new(),
-            name: String::new(),
             properties: Vec::new(),
-
-            resource_type: "GMRBackgroundLayer".to_string(),
-            resource_version: "2.0".to_string(),
 
             sprite_id: Value::Null,
             stretch: false,
@@ -223,13 +204,9 @@ impl Default for BackgroundLayer {
     }
 }
 
-impl BackgroundLayer {
-    pub fn new(name: impl Into<String>, depth: i32) -> Self {
-        let name = name.into();
-
+impl GMRBackgroundLayer {
+    pub fn new(depth: i32) -> Self {
         Self {
-            display_name: name.clone(),
-            name,
             depth,
             ..Default::default()
         }
@@ -238,24 +215,24 @@ impl BackgroundLayer {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Layer {
-    Instance(InstanceLayer),
-    Background(BackgroundLayer),
+    Instance(GMRInstanceLayer),
+    Background(GMRBackgroundLayer),
 }
 
 pub trait LayerTrait {
     fn name(&self) -> &str;
-    fn instances(&self) -> Option<&Vec<Instance>>;
+    fn instances(&self) -> Option<&Vec<GMRInstance>>;
 }
 
 impl LayerTrait for Layer {
     fn name(&self) -> &str {
         match self {
-            Layer::Instance(layer) => &layer.name,
-            Layer::Background(layer) => &layer.name,
+            Layer::Instance(layer) => &layer.base.name,
+            Layer::Background(layer) => &layer.base.name,
         }
     }
 
-    fn instances(&self) -> Option<&Vec<Instance>> {
+    fn instances(&self) -> Option<&Vec<GMRInstance>> {
         match self {
             Layer::Instance(layer) => Some(&layer.instances),
             Layer::Background(_) => None,
@@ -265,17 +242,17 @@ impl LayerTrait for Layer {
 
 impl Default for Layer {
     fn default() -> Self {
-        Layer::Instance(InstanceLayer::default())
+        Layer::Instance(GMRInstanceLayer::default())
     }
 }
 
 impl Layer {
-    pub fn instance_layer(name: impl Into<String>, depth: i32) -> Self {
-        Self::Instance(InstanceLayer::new(name, depth))
+    pub fn instance_layer(depth: i32) -> Self {
+        Self::Instance(GMRInstanceLayer::new(depth))
     }
 
-    pub fn background_layer(name: impl Into<String>, depth: i32) -> Self {
-        Self::Background(BackgroundLayer::new(name, depth))
+    pub fn background_layer(depth: i32) -> Self {
+        Self::Background(GMRBackgroundLayer::new(depth))
     }
 }
 
@@ -343,7 +320,7 @@ impl<'de> Deserialize<'de> for Layer {
 
         match value.get("$GMRInstanceLayer") {
             Some(_) => {
-                let layer = serde_json::from_value::<InstanceLayer>(value)
+                let layer = serde_json::from_value::<GMRInstanceLayer>(value)
                     .map_err(serde::de::Error::custom)?;
 
                 Ok(Layer::Instance(layer))
@@ -351,7 +328,7 @@ impl<'de> Deserialize<'de> for Layer {
 
             None => match value.get("$GMRBackgroundLayer") {
                 Some(_) => {
-                    let layer = serde_json::from_value::<BackgroundLayer>(value)
+                    let layer = serde_json::from_value::<GMRBackgroundLayer>(value)
                         .map_err(serde::de::Error::custom)?;
 
                     Ok(Layer::Background(layer))
