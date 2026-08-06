@@ -1,4 +1,5 @@
 mod object;
+mod path;
 pub mod room;
 mod script;
 mod shader;
@@ -8,6 +9,7 @@ use super::ResourceId;
 use crate::project::formatter::read_gamemaker_json;
 
 pub use object::GMObject;
+pub use path::GMPath;
 pub use room::GMRoom;
 pub use script::GMScript;
 pub use shader::GMShader;
@@ -23,6 +25,7 @@ pub enum ResourceKind {
     Script,
     Sprite,
     Shader,
+    Path,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -32,6 +35,7 @@ pub enum Resource {
     Script(GMScript),
     Sprite(GMSprite),
     Shader(GMShader),
+    Path(GMPath),
 }
 
 pub trait ResourceTrait {
@@ -48,17 +52,19 @@ impl ResourceTrait for Resource {
             Resource::Script(script) => script.name(),
             Resource::Sprite(sprite) => sprite.name(),
             Resource::Shader(shader) => shader.name(),
+            Resource::Path(path) => path.name(),
         }
     }
-    fn save(&self, path: &std::path::Path) -> std::io::Result<()> {
-        let parent_dir = path.parent().expect("Failed to get parent directory");
+    fn save(&self, file_path: &std::path::Path) -> std::io::Result<()> {
+        let parent_dir = file_path.parent().expect("Failed to get parent directory");
         fs::create_dir_all(parent_dir)?;
         match self {
-            Resource::Room(room) => room.save(path),
-            Resource::Object(object) => object.save(path),
-            Resource::Script(script) => script.save(path),
-            Resource::Sprite(sprite) => sprite.save(path),
-            Resource::Shader(shader) => shader.save(path),
+            Resource::Room(room) => room.save(file_path),
+            Resource::Object(object) => object.save(file_path),
+            Resource::Script(script) => script.save(file_path),
+            Resource::Sprite(sprite) => sprite.save(file_path),
+            Resource::Shader(shader) => shader.save(file_path),
+            Resource::Path(path) => path.save(file_path),
         }
     }
     fn default_path(&self) -> String {
@@ -68,6 +74,7 @@ impl ResourceTrait for Resource {
             Resource::Script(script) => script.default_path(),
             Resource::Sprite(sprite) => sprite.default_path(),
             Resource::Shader(shader) => shader.default_path(),
+            Resource::Path(path) => path.default_path(),
         }
     }
 }
@@ -93,11 +100,15 @@ impl Resource {
                     parent,
                     &std::path::Path::new(&format!("sprites/{}/{}.yy", name, name)),
                 );
-                Resource::Sprite(sprite)
+                Resource::from_sprite(sprite)
             }
             ResourceKind::Shader => {
                 let shader = GMShader::new(name, parent);
-                Resource::Shader(shader)
+                Resource::from_shader(shader)
+            }
+            ResourceKind::Path => {
+                let path = GMPath::new(name, parent);
+                Resource::from_path(path)
             }
         }
     }
@@ -141,6 +152,7 @@ impl Resource {
             Resource::Script(_) => ResourceKind::Script,
             Resource::Sprite(_) => ResourceKind::Sprite,
             Resource::Shader(_) => ResourceKind::Shader,
+            Resource::Path(_) => ResourceKind::Path,
         }
     }
 
@@ -222,6 +234,22 @@ impl Resource {
     }
     pub fn from_shader(shader: GMShader) -> Self {
         Resource::Shader(shader)
+    }
+
+    pub fn as_path(&self) -> Option<&GMPath> {
+        match self {
+            Resource::Path(path) => Some(path),
+            _ => None,
+        }
+    }
+    pub fn as_path_mut(&mut self) -> Option<&mut GMPath> {
+        match self {
+            Resource::Path(path) => Some(path),
+            _ => None,
+        }
+    }
+    pub fn from_path(path: GMPath) -> Self {
+        Resource::Path(path)
     }
 }
 
