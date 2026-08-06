@@ -1,6 +1,7 @@
 mod object;
 pub mod room;
 mod script;
+mod shader;
 mod sprite;
 
 use super::ResourceId;
@@ -9,6 +10,7 @@ use crate::project::formatter::read_gamemaker_json;
 pub use object::GMObject;
 pub use room::GMRoom;
 pub use script::GMScript;
+pub use shader::GMShader;
 pub use sprite::GMSprite;
 
 use serde::{Deserialize, Serialize};
@@ -20,6 +22,7 @@ pub enum ResourceKind {
     Object,
     Script,
     Sprite,
+    Shader,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -28,6 +31,7 @@ pub enum Resource {
     Object(GMObject),
     Script(GMScript),
     Sprite(GMSprite),
+    Shader(GMShader),
 }
 
 pub trait ResourceTrait {
@@ -43,6 +47,7 @@ impl ResourceTrait for Resource {
             Resource::Object(object) => object.name(),
             Resource::Script(script) => script.name(),
             Resource::Sprite(sprite) => sprite.name(),
+            Resource::Shader(shader) => shader.name(),
         }
     }
     fn save(&self, path: &std::path::Path) -> std::io::Result<()> {
@@ -53,6 +58,7 @@ impl ResourceTrait for Resource {
             Resource::Object(object) => object.save(path),
             Resource::Script(script) => script.save(path),
             Resource::Sprite(sprite) => sprite.save(path),
+            Resource::Shader(shader) => shader.save(path),
         }
     }
     fn default_path(&self) -> String {
@@ -61,6 +67,7 @@ impl ResourceTrait for Resource {
             Resource::Object(object) => object.default_path(),
             Resource::Script(script) => script.default_path(),
             Resource::Sprite(sprite) => sprite.default_path(),
+            Resource::Shader(shader) => shader.default_path(),
         }
     }
 }
@@ -88,6 +95,10 @@ impl Resource {
                 );
                 Resource::Sprite(sprite)
             }
+            ResourceKind::Shader => {
+                let shader = GMShader::new(name, parent);
+                Resource::Shader(shader)
+            }
         }
     }
     pub fn load(path: &std::path::Path) -> std::io::Result<Self>
@@ -113,6 +124,10 @@ impl Resource {
                 let sprite = GMSprite::load(value)?;
                 Ok(Resource::Sprite(sprite))
             }
+            Some("GMShader") => {
+                let shader = GMShader::load(value)?;
+                Ok(Resource::Shader(shader))
+            }
             _ => {
                 unimplemented!("Loading for this resource type is not implemented yet")
             }
@@ -125,6 +140,7 @@ impl Resource {
             Resource::Object(_) => ResourceKind::Object,
             Resource::Script(_) => ResourceKind::Script,
             Resource::Sprite(_) => ResourceKind::Sprite,
+            Resource::Shader(_) => ResourceKind::Shader,
         }
     }
 
@@ -190,6 +206,22 @@ impl Resource {
     }
     pub fn from_sprite(sprite: GMSprite) -> Self {
         Resource::Sprite(sprite)
+    }
+
+    pub fn as_shader(&self) -> Option<&GMShader> {
+        match self {
+            Resource::Shader(shader) => Some(shader),
+            _ => None,
+        }
+    }
+    pub fn as_shader_mut(&mut self) -> Option<&mut GMShader> {
+        match self {
+            Resource::Shader(shader) => Some(shader),
+            _ => None,
+        }
+    }
+    pub fn from_shader(shader: GMShader) -> Self {
+        Resource::Shader(shader)
     }
 }
 
