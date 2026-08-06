@@ -13,10 +13,12 @@ use serde_json::Value;
 use std::{collections::HashMap, fs};
 use uuid::Uuid;
 
+mod layer;
+
 use crate::project::{
     ResourceId, ResourceTrait,
     formatter::format_gamemaker_json,
-    resource::{ResourceBase, ResourceType},
+    resource::{ResourceBase, ResourceType, sprite::layer::SpriteImageLayer},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -28,7 +30,7 @@ pub struct GMSprite {
     pub parent: ResourceId,
 
     pub frames: Vec<GMSpriteFrame>,
-    pub layers: Vec<GMImageLayer>,
+    pub layers: Vec<SpriteImageLayer>,
     pub sequence: GMSequence,
 
     #[serde(rename = "bboxMode")]
@@ -108,7 +110,7 @@ impl Default for GMSprite {
             grid_y: 0,
             height: 64,
             h_tile: false,
-            layers: vec![GMImageLayer::default()],
+            layers: vec![SpriteImageLayer::default()],
             nine_slice: Value::Null,
             origin: 0,
             pre_multiply_alpha: false,
@@ -146,10 +148,21 @@ impl ResourceTrait for GMSprite {
 
             // All images must have same number of layers
             let sprite_frame_path = path.with_file_name(format!("{}.yy", &sprite_frame.base.name));
-            for image_layer in &self.layers {
-                image_layer
-                    .ensure_image_exists(&sprite_frame_path)
-                    .expect("Failed to ensure image exists for image layer");
+            for layer in &self.layers {
+                match layer {
+                    SpriteImageLayer::Image(image_layer) => {
+                        image_layer
+                            .ensure_image_exists(&sprite_frame_path)
+                            .expect("Failed to ensure image exists for image layer");
+                    }
+                    SpriteImageLayer::Folder(folder_layer) => {
+                        for image_layer in &folder_layer.layers {
+                            image_layer
+                                .ensure_image_exists(&sprite_frame_path)
+                                .expect("Failed to ensure image exists for image layer in folder");
+                        }
+                    }
+                }
             }
         }
 
@@ -205,69 +218,6 @@ impl GMSpriteFrame {
     ) -> Result<(), Box<dyn std::error::Error>> {
         // create blank 64x64 png image and save it to the sprite frame's path
         let img_path = sprite_path.with_file_name(format!("{}.png", self.base.name));
-        if !img_path.exists() {
-            let img = image::ImageBuffer::from_pixel(64, 64, image::Rgba([0u8, 0, 0, 0]));
-            img.save(&img_path)?;
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct GMImageLayer {
-    #[serde(rename = "$GMImageLayer")]
-    pub resource_tag: String,
-    #[serde(flatten)]
-    pub base: ResourceBase,
-
-    #[serde(rename = "blendMode")]
-    pub blend_mode: i32,
-    #[serde(rename = "displayName")]
-    pub display_name: String,
-    #[serde(rename = "isLocked")]
-    pub is_locked: bool,
-    pub opacity: f32,
-    pub visible: bool,
-}
-
-impl Default for GMImageLayer {
-    fn default() -> Self {
-        let uuid = Uuid::new_v4().to_string();
-        Self {
-            resource_tag: String::new(),
-            base: ResourceBase::new(uuid.as_str(), "GMImageLayer"),
-            blend_mode: 0,
-            display_name: "default".into(),
-            is_locked: false,
-            opacity: 100.0,
-            visible: true,
-        }
-    }
-}
-
-impl GMImageLayer {
-    pub fn ensure_image_exists(
-        &self,
-        frame_path: &std::path::Path,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        // get file name from path
-        let stem = frame_path.file_stem().ok_or("No file stem")?;
-
-        // create "layers" directory in the same directory as the frame_path
-        let layers_dir = frame_path.with_file_name("layers");
-        if !layers_dir.exists() {
-            std::fs::create_dir_all(&layers_dir)?;
-        }
-
-        // create directory in the same directory as the frame_path with the name of the file without extension
-        let dir_path = layers_dir.join(stem);
-        if !dir_path.exists() {
-            std::fs::create_dir_all(&dir_path)?;
-        }
-
-        // create blank 64x64 png image and save it to the layer's path
-        let img_path = dir_path.join(format!("{}.png", self.base.name));
         if !img_path.exists() {
             let img = image::ImageBuffer::from_pixel(64, 64, image::Rgba([0u8, 0, 0, 0]));
             img.save(&img_path)?;
