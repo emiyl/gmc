@@ -85,7 +85,7 @@ impl GMImageLayer {
         }
 
         // create blank 64x64 png image and save it to the layer's path
-        let img_path = dir_path.join(format!("{}.png", self.base.name));
+        let img_path = dir_path.join(format!("{}.png", self.base.base.name));
         if !img_path.exists() {
             let img = image::ImageBuffer::from_pixel(64, 64, image::Rgba([0u8, 0, 0, 0]));
             img.save(&img_path)?;

@@ -18,7 +18,11 @@ mod layer;
 use crate::project::{
     ResourceId, ResourceTrait,
     formatter::format_gamemaker_json,
-    resource::{ResourceBase, ResourceType, sprite::layer::SpriteImageLayer},
+    resource::{
+        ResourceBase, ResourceType,
+        sprite::layer::SpriteImageLayer,
+        track::{GMSpriteFramesTrack, Keyframe, SpriteFrameChannel, SpriteFrameStore},
+    },
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -327,24 +331,27 @@ impl Default for GMSequence {
 
 impl GMSequence {
     pub fn new(frames: Vec<String>, sprite_path: &std::path::Path) -> Self {
+        let keyframes: Vec<Keyframe<SpriteFrameChannel>> = frames
+            .clone()
+            .into_iter()
+            .enumerate()
+            .map(|(i, frame_name)| {
+                let mut channels = HashMap::new();
+                channels.insert(
+                    "0".to_string(),
+                    SpriteFrameChannel::new(
+                        frame_name.clone(),
+                        sprite_path.to_string_lossy().to_string(),
+                    ),
+                );
+                Keyframe::new("Keyframe<SpriteFrameKeyframe>", channels, i as f64)
+            })
+            .collect();
+
         Self {
             tracks: vec![GMSpriteFramesTrack::new(SpriteFrameStore::new(
-                frames
-                    .clone()
-                    .into_iter()
-                    .enumerate()
-                    .map(|(i, frame_name)| {
-                        let mut channels = HashMap::new();
-                        channels.insert(
-                            "0".to_string(),
-                            SpriteFrameChannel::new(
-                                frame_name.clone(),
-                                sprite_path.to_string_lossy().to_string(),
-                            ),
-                        );
-                        SpriteFrameKeyframe::new(channels, i as f32)
-                    })
-                    .collect(),
+                "KeyframeStore<SpriteFrameKeyframe>",
+                keyframes,
             ))],
             length: frames.len() as f32,
             ..Default::default()
@@ -390,195 +397,6 @@ impl Default for MomentsEventStore {
             resource_tag: String::new(),
             resource_type: ResourceType::new("KeyframeStore<MomentsEventKeyframe>"),
             keyframes: Vec::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct GMSpriteFramesTrack {
-    #[serde(rename = "$GMSpriteFramesTrack")]
-    pub resource_tag: String,
-    #[serde(rename = "builtinName")]
-    pub builtin_name: i32,
-    pub name: String,
-    #[serde(flatten)]
-    pub resource_type: ResourceType,
-
-    pub events: Vec<Value>,
-
-    #[serde(rename = "inheritsTrackColour")]
-    pub inherits_track_colour: bool,
-    pub interpolation: i32,
-    #[serde(rename = "isCreationTrack")]
-    pub is_creation_track: bool,
-
-    pub keyframes: SpriteFrameStore,
-
-    pub modifiers: Vec<Value>,
-
-    #[serde(rename = "spriteId")]
-    pub sprite_id: Value,
-
-    #[serde(rename = "trackColour")]
-    pub track_colour: i32,
-
-    pub tracks: Vec<Value>,
-
-    pub traits: i32,
-}
-
-impl Default for GMSpriteFramesTrack {
-    fn default() -> Self {
-        Self {
-            resource_tag: String::new(),
-            builtin_name: 0,
-            name: "frames".into(),
-            resource_type: ResourceType::new("GMSpriteFramesTrack"),
-
-            events: Vec::new(),
-            inherits_track_colour: true,
-            interpolation: 1,
-            is_creation_track: false,
-            keyframes: SpriteFrameStore::default(),
-            modifiers: Vec::new(),
-            sprite_id: Value::Null,
-            track_colour: 0,
-            tracks: Vec::new(),
-            traits: 0,
-        }
-    }
-}
-
-impl GMSpriteFramesTrack {
-    pub fn new(keyframes: SpriteFrameStore) -> Self {
-        Self {
-            keyframes,
-            ..Default::default()
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct SpriteFrameStore {
-    #[serde(rename = "$KeyframeStore<SpriteFrameKeyframe>")]
-    pub resource_tag: String,
-    #[serde(flatten)]
-    pub resource_type: ResourceType,
-
-    #[serde(rename = "Keyframes")]
-    pub keyframes: Vec<SpriteFrameKeyframe>,
-}
-
-impl Default for SpriteFrameStore {
-    fn default() -> Self {
-        Self {
-            resource_tag: String::new(),
-            resource_type: ResourceType::new("KeyframeStore<SpriteFrameKeyframe>"),
-            keyframes: Vec::new(),
-        }
-    }
-}
-
-impl SpriteFrameStore {
-    pub fn new(keyframes: Vec<SpriteFrameKeyframe>) -> Self {
-        Self {
-            keyframes,
-            ..Default::default()
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct SpriteFrameKeyframe {
-    #[serde(rename = "$Keyframe<SpriteFrameKeyframe>")]
-    pub resource_tag: String,
-    #[serde(flatten)]
-    pub resource_type: ResourceType,
-
-    #[serde(rename = "Channels")]
-    pub channels: HashMap<String, SpriteFrameChannel>,
-
-    #[serde(rename = "Disabled")]
-    pub disabled: bool,
-
-    pub id: String,
-
-    #[serde(rename = "IsCreationKey")]
-    pub is_creation_key: bool,
-
-    #[serde(rename = "Key")]
-    pub key: f32,
-
-    #[serde(rename = "Length")]
-    pub length: f32,
-
-    #[serde(rename = "Stretch")]
-    pub stretch: bool,
-}
-
-impl Default for SpriteFrameKeyframe {
-    fn default() -> Self {
-        Self {
-            resource_tag: String::new(),
-            resource_type: ResourceType::new("Keyframe<SpriteFrameKeyframe>"),
-            channels: HashMap::new(),
-            disabled: false,
-            id: String::new(),
-            is_creation_key: false,
-            key: 0.0,
-            length: 1.0,
-            stretch: false,
-        }
-    }
-}
-
-impl SpriteFrameKeyframe {
-    pub fn new(channels: HashMap<String, SpriteFrameChannel>, key: f32) -> Self {
-        Self {
-            channels,
-            key,
-            ..Default::default()
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct SpriteFrameChannel {
-    #[serde(rename = "$SpriteFrameKeyframe")]
-    pub resource_tag: String,
-    #[serde(flatten)]
-    pub resource_type: ResourceType,
-
-    #[serde(rename = "Id")]
-    pub id: ResourceId,
-}
-
-impl Default for SpriteFrameChannel {
-    fn default() -> Self {
-        let uuid = Uuid::new_v4().to_string();
-        let sprite_default_path = "sprites/Sprite1/Sprite1.yy";
-        let resource_id = ResourceId {
-            name: uuid,
-            path: sprite_default_path.into(),
-        };
-
-        Self {
-            resource_tag: String::new(),
-            resource_type: ResourceType::new("SpriteFrameKeyframe"),
-            id: resource_id,
-        }
-    }
-}
-
-impl SpriteFrameChannel {
-    pub fn new(name: String, path: String) -> Self {
-        let id = ResourceId {
-            name: name,
-            path: path,
-        };
-        Self {
-            id,
-            ..Default::default()
         }
     }
 }

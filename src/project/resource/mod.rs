@@ -2,8 +2,10 @@ mod object;
 mod path;
 pub mod room;
 mod script;
+mod sequence;
 mod shader;
 mod sprite;
+mod track;
 
 use super::ResourceId;
 use crate::project::formatter::read_gamemaker_json;
