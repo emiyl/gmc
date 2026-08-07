@@ -140,6 +140,13 @@ impl DataWin {
         }
 
         data_win.code = code_entries;
+        let mut resolved_variables: Vec<_> = resolver.variables.values().collect();
+        resolved_variables.sort_unstable_by_key(|variable| variable.var_ref);
+        data_win.variables = resolved_variables
+            .into_iter()
+            .map(resolved_variable_to_compiled)
+            .collect();
+
         let mut resolved_functions: Vec<_> = resolver.functions.values().collect();
         resolved_functions.sort_unstable_by_key(|function| function.var_ref);
         data_win.functions = resolved_functions
