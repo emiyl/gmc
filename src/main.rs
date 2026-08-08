@@ -327,14 +327,12 @@ fn main() {
 
             let build_dir = project_path.parent().unwrap_or(project_path).join("build");
             let data_win_path = build_dir.join("data.win");
-            if !build_dir.exists() || !data_win_path.exists() {
-                println!("Build output not found. Building project...");
-                let output = data_win::DataWin::from_project(project);
-                let output_path = build_dir.join("data.win");
-                if let Err(e) = output.save(&output_path) {
-                    eprintln!("Error saving build output: {}", e);
-                    return;
-                }
+
+            println!("Building project...");
+            let output = data_win::DataWin::from_project(project);
+            if let Err(e) = output.save(&data_win_path) {
+                eprintln!("Error saving build output: {}", e);
+                return;
             }
 
             // Determine the runner path
