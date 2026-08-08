@@ -157,12 +157,28 @@ impl GmProject {
             .map(|resource| &resource.id)
     }
 
-    pub fn add_resource(&mut self, name: &str, resource_kind: ResourceKind) -> std::io::Result<()> {
-        let resource = Resource::new(name, resource_kind.clone(), self.resource_id.clone());
+    pub fn add_resource(
+        &mut self,
+        name: Option<String>,
+        resource_kind: ResourceKind,
+    ) -> std::io::Result<()> {
+        let name = name.unwrap_or_else(|| {
+            let mut counter = 1u32;
+            let mut name = format!("{}{}", resource_kind, counter);
+
+            while self.resource_exists(&name) {
+                counter += 1;
+                name = format!("{}{}", resource_kind, counter);
+            }
+
+            name
+        });
+
+        let resource = Resource::new(&name, resource_kind.clone(), self.resource_id.clone());
         let resource_name = resource.name().to_string();
         let resource_path = resource.default_path();
 
-        if self.resource_exists(name) {
+        if self.resource_exists(&name) {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::AlreadyExists,
                 format!("Resource with name '{}' already exists", name),

@@ -5,12 +5,12 @@ GML compiler written in Rust. Thank you to [Butterscotch](https://github.com/But
 It uses the WAD 17 format but it's still a little wonky. You can generate data.win files using a command like this:
 
 ```bash
-gmc new project
-cd project
-gmc add room Room1
-gmc add object Object1
-gmc object add event Object1 Create
-gmc room add instance Room1 Object1 0 0
+gmc new <project_name>
+cd <project_name>
+gmc add room <room_name>
+gmc add object <object_name>
+gmc object add event <object_name> Create
+gmc room add instance <room_name> <object_name> 0 0
 gmc build
 ```
 

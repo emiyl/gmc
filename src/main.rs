@@ -111,15 +111,15 @@ pub struct AddArgs {
 
 #[derive(Subcommand, Debug)]
 pub enum AddResourceCommand {
-    Object { name: String },
-    Sprite { name: String },
-    Script { name: String },
-    Room { name: String },
-    Font { name: String },
-    Sound { name: String },
-    Shader { name: String },
-    Path { name: String },
-    Sequence { name: String },
+    Object { name: Option<String> },
+    Sprite { name: Option<String> },
+    Script { name: Option<String> },
+    Room { name: Option<String> },
+    Font { name: Option<String> },
+    Sound { name: Option<String> },
+    Shader { name: Option<String> },
+    Path { name: Option<String> },
+    Sequence { name: Option<String> },
 }
 
 #[derive(Args, Debug)]
@@ -374,27 +374,23 @@ fn main() {
             };
 
             let (resource_kind, name) = match &args.resource {
-                AddResourceCommand::Room { name } => (ResourceKind::Room, name.clone()),
-                AddResourceCommand::Object { name } => (ResourceKind::Object, name.clone()),
-                AddResourceCommand::Script { name } => (ResourceKind::Script, name.clone()),
-                AddResourceCommand::Sprite { name } => (ResourceKind::Sprite, name.clone()),
+                AddResourceCommand::Room { name } => (ResourceKind::Room, name),
+                AddResourceCommand::Object { name } => (ResourceKind::Object, name),
+                AddResourceCommand::Script { name } => (ResourceKind::Script, name),
+                AddResourceCommand::Sprite { name } => (ResourceKind::Sprite, name),
                 _ => {
                     eprintln!("Unsupported resource type for adding");
                     return;
                 }
             };
 
-            if !project.resource_exists(&name) {
-                project
-                    .add_resource(&name, resource_kind)
-                    .expect("Failed to add resource");
-                if let Err(e) = project.save() {
-                    eprintln!("Error saving project: {}", e);
-                } else {
-                    println!("Resource added successfully");
-                }
+            project
+                .add_resource(name.clone(), resource_kind)
+                .expect("Failed to add resource");
+            if let Err(e) = project.save() {
+                eprintln!("Error saving project: {}", e);
             } else {
-                println!("Error: Resource {} already exists.", name);
+                println!("Resource added successfully");
             }
         }
         Command::Object(args) => match &args.command {

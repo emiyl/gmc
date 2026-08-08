@@ -9,6 +9,7 @@ mod track;
 
 use super::ResourceId;
 use crate::project::formatter::read_gamemaker_json;
+use strum_macros::Display;
 
 pub use object::GMObject;
 pub use path::GMPath;
@@ -20,7 +21,7 @@ pub use sprite::GMSprite;
 use serde::{Deserialize, Serialize};
 use std::fs;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Display)]
 pub enum ResourceKind {
     Room,
     Object,
