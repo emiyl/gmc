@@ -116,6 +116,13 @@ pub fn print_disassembly(bytecode: &Bytecode) {
                                 type2_str = type_print.1,
                                 num = extra_data[0] as i32
                             )
+                        } else if value_type == ValueType::String {
+                            format!(
+                                "{opcode:?}.{type2_char} 0x{extra_data:08X} (pushes: [{type2_str}])",
+                                type2_char = type_print.0,
+                                type2_str = type_print.1,
+                                extra_data = extra_data[0]
+                            )
                         } else {
                             format!(
                                 "{opcode:?}.{type2_char} 0x{extra_data:8X} (pushes: [{type2_str}])",

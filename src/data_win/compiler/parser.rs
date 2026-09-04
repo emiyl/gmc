@@ -1368,7 +1368,9 @@ impl Parser {
             Token::Number(text) => {
                 let value = text.clone();
                 self.advance();
-                if value.contains('.') || value.contains('e') || value.contains('E') {
+                if let Some(hex_value) = value.strip_prefix('$') {
+                    Expr::Integer(u32::from_str_radix(hex_value, 16).unwrap() as i32)
+                } else if value.contains('.') || value.contains('e') || value.contains('E') {
                     Expr::Float(value.parse().unwrap())
                 } else {
                     Expr::Integer(value.parse().unwrap())
@@ -1471,6 +1473,7 @@ impl Parser {
                         }
                     }
 
+                    self.skip_newlines();
                     if self.current != Token::RightParen {
                         panic!(
                             "Expected ')', got {:?} at line {}, token {}",
@@ -1545,6 +1548,34 @@ mod tests {
         assert_eq!(
             format!("{:?}", program[0]),
             "VarDeclaration { declarations: [(\"x\", Some(Unary { operator: Neg, operand: Integer(5) }))] }"
+        );
+    }
+
+    #[test]
+    fn parse_hexadecimal_integer_literal() {
+        let input = "var x = $FF;";
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+
+        let program = parser.parse_program();
+        assert_eq!(program.len(), 1);
+        assert_eq!(
+            format!("{:?}", program[0]),
+            "VarDeclaration { declarations: [(\"x\", Some(Integer(255)))] }"
+        );
+    }
+
+    #[test]
+    fn parse_large_hexadecimal_integer_literal() {
+        let input = "var x = $80FF0000;";
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+
+        let program = parser.parse_program();
+        assert_eq!(program.len(), 1);
+        assert_eq!(
+            format!("{:?}", program[0]),
+            "VarDeclaration { declarations: [(\"x\", Some(Integer(-2130771968)))] }"
         );
     }
 

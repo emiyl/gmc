@@ -213,6 +213,7 @@ impl Lexer {
             '}' => Token::RightBrace,
             '"' | '\'' => return self.read_string(c),
 
+            '$' => return self.read_hex_number(),
             '0'..='9' => return self.read_number(),
             'a'..='z' | 'A'..='Z' | '_' => return self.read_identifier(),
 
@@ -251,6 +252,22 @@ impl Lexer {
 
         let text: String = self.input[start..self.position].iter().collect();
 
+        Token::Number(text)
+    }
+
+    fn read_hex_number(&mut self) -> Token {
+        let start = self.position;
+        self.position += 1;
+
+        while self.position < self.input.len() && self.input[self.position].is_ascii_hexdigit() {
+            self.position += 1;
+        }
+
+        if self.position == start + 1 {
+            panic!("Expected hexadecimal digit after $");
+        }
+
+        let text: String = self.input[start..self.position].iter().collect();
         Token::Number(text)
     }
 
